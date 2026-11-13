@@ -1,4 +1,3 @@
-// Generate auditable field-level RTDB permissions; never deploy from this script.
 const fs=require('node:fs');
 const path=require('node:path');
 const admin="auth != null && root.child('access').child(auth.uid).child('enabled').val() == true && root.child('access').child(auth.uid).child('role').val() == 'admin'";
@@ -9,7 +8,6 @@ for(const prefix of ['', 'temp','thi']){
   if(prefix)for(const key of ['Threshold','Hysteresis','MaxDuration','Cooldown','AutoSrc','SchN'])settingFields.push(prefix+key);
   for(let i=1;i<=6;i++)for(const key of ['Date','Start','Dur'])settingFields.push(prefix+'Sch'+i+key);
 }
-// Existing legacy fields use lower-case sch; preserve firmware compatibility.
 const fields=[...new Set(settingFields.map(k=>k.startsWith('Sch')?'s'+k.slice(1):k))];
 const control={'.read':device('monitor'),'.validate':"newData.hasChild('mode') && (newData.child('mode').val() == 'auto' || newData.child('mode').val() == 'manual')"};
 for(const key of fields){

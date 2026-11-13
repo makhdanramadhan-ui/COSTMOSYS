@@ -1,4 +1,3 @@
-// Access records are authoritative only after Firebase Rules accepts them.
 (function(root, factory){
   const api=factory();
   if(typeof module!=='undefined' && module.exports) module.exports=api;
@@ -23,9 +22,7 @@
     return {email:email.trim().toLowerCase(),name:name.trim(),role,enabled:enabled===true,
       permissions:{monitor:admin||!!(monitor||settings||operate),settings:admin||!!settings,operate:admin||!!operate},updatedAt:now};
   }
-  // Editing a User cannot silently promote it; Admin creation is a separate choice.
   function userRecord(record,now){return accountRecord({...record,role:'user'},now);}
-  // Mode/manual outputs must never travel with a settings-only save.
   function settingsPayload(payload){
     const {mode,manualSsr,updatedAt,updatedBy,...settings}=payload;
     return settings;

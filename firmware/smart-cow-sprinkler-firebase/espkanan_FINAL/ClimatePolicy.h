@@ -2,7 +2,6 @@
 #include <math.h>
 #include <stdint.h>
 
-// Sama dengan js/core.js: T dari rata-rata 6 DS, RH dari rata-rata 4 DHT.
 inline float aggregateThi(float temperature, float humidity) {
   if (!isfinite(temperature) || temperature < -55 || temperature > 125 ||
       !isfinite(humidity) || humidity < 0 || humidity > 100) return NAN;

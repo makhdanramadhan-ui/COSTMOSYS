@@ -1,4 +1,3 @@
-// Requires local demo emulators. No production credentials or writes.
 const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
 const {ref,set,get,update,push,serverTimestamp}=require('firebase/database');
 const {initializeAuth,inMemoryPersistence,connectAuthEmulator,createUserWithEmailAndPassword,signInWithEmailAndPassword}=require('firebase/auth');
@@ -78,7 +77,6 @@ const projectId='demo-smartcow-access',base='devices/cow-sprinkler-01';
       await pass(get(ref(db(secondary.uid),base+'/telemetry/latest')));
       await pass(set(ref(admin,'access/'+secondary.uid),null));
       await fail(get(ref(db(secondary.uid),base+'/telemetry/latest')));
-      // Without billing/backend, removal deliberately leaves the Auth identity intact.
       await signInWithEmailAndPassword(secondary.auth,'user@emulator.test','Emulator-only-123');count++;
       await assert.rejects(create('duplicate','user@emulator.test'),e=>e.code==='auth/email-already-in-use');count++;
       const peer=await create('peer-admin','peer-admin@emulator.test');

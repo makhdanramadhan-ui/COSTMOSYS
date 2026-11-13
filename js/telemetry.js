@@ -1,4 +1,3 @@
-// Normalisasi sensor dan freshness. Tidak mengganti data hilang dengan nol.
 (function (root, factory) {
   const api = factory(typeof module !== 'undefined' && module.exports ? require('./core.js') : root.SCS);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -42,7 +41,6 @@
     }
     const validCount = s.filter(finite).length;
     const humidityValidCount = h.filter(finite).length;
-    // Rata-rata firmware hanya dipercaya selama semua sampel yang menyusunnya masih fresh.
     const backendCount = Number.isInteger(raw.validCount) ? raw.validCount : validCount;
     const avg = validCount && backendCount === validCount && temperature(raw.avg) ? raw.avg : average(s);
     const leftAge = finite(raw.leftAgeMs) ? raw.leftAgeMs + elapsed : null;

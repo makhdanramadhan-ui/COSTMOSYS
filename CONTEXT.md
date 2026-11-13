@@ -1,37 +1,51 @@
-# Smart Cow Sprinkler
+# Istilah SmartCow
 
-Glosarium domain kandang sapi. Istilah implementasi (path database, nama fungsi) tidak masuk sini.
+Istilah berikut digunakan pada dashboard dan panduan pengoperasian kandang.
 
-## Language
+## Titik suhu
 
-**Titik suhu**:
-Enam lokasi ukur suhu kandang (depan, tengah, belakang).
-_Avoid_: sensor, probe, channel
+Lokasi pengukuran suhu kandang. Sistem membaca enam titik dengan DS18B20; posisi fisiknya ditentukan saat pemasangan.
 
-**Rata-rata kandang**:
-Rata-rata enam titik suhu, satu-satunya angka yang menggerakkan sprinkler.
-_Avoid_: average, mean
+## Rata-rata kandang
 
-**Threshold**:
-Batas rata-rata kandang yang menyalakan semprotan.
-_Avoid_: ambang (di UI), setpoint, target
+Rata-rata suhu dari titik yang valid dan masih baru. Kontrol otomatis berbasis suhu membutuhkan keenam titik dalam kondisi tersebut.
 
-**Hysteresis**:
-Selisih di bawah threshold untuk mematikan semprotan, pencegah relay hidup-mati cepat.
-_Avoid_: deadband, toleransi
+## Kelembapan relatif
 
-**Cooldown**:
-Jeda wajib antar dua semprotan agar kandang tidak becek dan air hemat.
-_Avoid_: delay, jeda acak
+Kandungan uap air relatif terhadap kondisi jenuh, ditampilkan dalam %RH. Empat titik kelembapan digunakan untuk menghitung rata-rata kandang.
 
-**Jadwal semprot**:
-Jam mulai dan lama semprotan harian yang memaksa sprinkler nyala di mode otomatis.
-_Avoid_: timer, scheduler
+## THI
 
-**Override manual**:
-Perintah langsung peternak yang mengalahkan mode otomatis.
-_Avoid_: bypass, force
+Temperature-Humidity Index, indikator lingkungan yang menggabungkan suhu dan kelembapan. SmartCow memakai rata-rata enam titik suhu dan empat titik kelembapan. Nilai ini bukan diagnosis stres panas pada sapi.
 
-**Event**:
-Catatan tiap perubahan sprinkler (nyala, mati, proteksi) sebagai bukti kerja.
-_Avoid_: notifikasi, alarm
+## Dasar kontrol
+
+Pilihan besaran yang mengendalikan sprinkler: suhu atau THI. Keduanya memiliki profil pengaturan tersendiri; hanya profil terpilih yang digunakan.
+
+## Threshold
+
+Batas nilai yang mengizinkan sprinkler mulai menyala dalam mode otomatis, selama syarat sensor dan pengaman lain terpenuhi.
+
+## Hysteresis
+
+Selisih di bawah threshold untuk mematikan sprinkler, agar relay tidak berulang kali hidup dan mati ketika pembacaan berada di sekitar batas.
+
+## Cooldown
+
+Jeda setelah sprinkler berhenti sebelum siklus otomatis berikutnya dapat dimulai.
+
+## Jadwal semprot
+
+Jendela waktu bertanggal dalam WIB yang membatasi kapan kontrol otomatis boleh bekerja. Jadwal tidak memaksa sprinkler menyala: threshold, kelengkapan pembacaan, durasi maksimum, dan cooldown tetap berlaku.
+
+## Override manual
+
+Perintah pengguna untuk mengoperasikan sprinkler dalam mode manual. ON bertahan sampai perintah OFF; proteksi durasi dan cooldown otomatis tidak diterapkan pada mode ini.
+
+## Data kedaluwarsa
+
+Pembacaan yang sudah melewati batas usia penggunaan. Angka terakhir mungkin masih tersedia, tetapi tidak boleh dianggap sebagai kondisi terkini.
+
+## Event
+
+Catatan perubahan atau tindakan pada sistem, seperti sprinkler menyala, berhenti, atau pengaturan diperbarui.

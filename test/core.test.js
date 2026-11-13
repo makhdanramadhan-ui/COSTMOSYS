@@ -1,4 +1,3 @@
-// TDD seam: logika murni sprinkler (tanpa DOM). Dijalankan: node --test test/
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const SCS = require('../js/core.js');
@@ -87,23 +86,22 @@ test('migrasi schedOn lama ke autoSrc', () => {
   assert.equal(SCS.autoSrcOf({ autoSrc: 'schedule', schedOn: false }), 'schedule');
 });
 test('multi-slot bertanggal: hanya jalan di tanggalnya', () => {
-  // 25 Sep 2026 20:49 WIB = epoch berikut (UTC+7):
-  const NOW = Date.UTC(2026, 8, 25, 13, 49); // 20:49 WIB
+  const NOW = Date.UTC(2026, 8, 25, 13, 49);
   const slots = [
     { date: '2026-09-25', start: '20:50', dur: 10 },
     { date: '2026-09-26', start: '09:00', dur: 10 },
   ];
   assert.equal(SCS.slotState(slots[0], NOW), 'future');
-  assert.equal(SCS.slotState(slots[0], Date.UTC(2026, 8, 25, 13, 55)), 'active'); // 20:55
-  assert.equal(SCS.slotState(slots[0], Date.UTC(2026, 8, 25, 14, 5)), 'past');    // 21:05
-  assert.equal(SCS.slotState(slots[1], NOW), 'future'); // beda tanggal -> future
+  assert.equal(SCS.slotState(slots[0], Date.UTC(2026, 8, 25, 13, 55)), 'active');
+  assert.equal(SCS.slotState(slots[0], Date.UTC(2026, 8, 25, 14, 5)), 'past');
+  assert.equal(SCS.slotState(slots[1], NOW), 'future');
   assert.equal(SCS.anyScheduleActive(NOW, slots), false);
   assert.equal(SCS.anyScheduleActive(Date.UTC(2026, 8, 25, 13, 55), slots), true);
-  assert.equal(SCS.anyScheduleActive(Date.UTC(2026, 8, 26, 2, 5), slots), true); // 26-09 09:05 WIB
+  assert.equal(SCS.anyScheduleActive(Date.UTC(2026, 8, 26, 2, 5), slots), true);
 });
 
 test('multi-slot: slot kemarin tidak ikut nyala hari ini', () => {
-  const NOW = Date.UTC(2026, 8, 26, 2, 0); // 26-09 09:00 WIB
+  const NOW = Date.UTC(2026, 8, 26, 2, 0);
   const slots = [{ date: '2026-09-25', start: '09:00', dur: 10 }];
   assert.equal(SCS.anyScheduleActive(NOW, slots), false);
   assert.deepEqual(SCS.prunePastSlots(slots, NOW), []);
@@ -112,21 +110,21 @@ test('multi-slot: slot kemarin tidak ikut nyala hari ini', () => {
 test('schedulesOf: migrasi format lama + filter rusak', () => {
   const T = '2026-09-25';
   assert.deepEqual(SCS.schedulesOf({ schedules: [{ date: T, start: '09:00', dur: 10 }] }, T), [{ date: T, start: '09:00', dur: 10 }]);
-  assert.deepEqual(SCS.schedulesOf({ schedules: [{ start: '09:00', dur: 10 }] }, T), [{ date: T, start: '09:00', dur: 10 }]); // tanpa tanggal -> hari ini
+  assert.deepEqual(SCS.schedulesOf({ schedules: [{ start: '09:00', dur: 10 }] }, T), [{ date: T, start: '09:00', dur: 10 }]);
   assert.deepEqual(SCS.schedulesOf({ schedStart: '12:00', schedDur: 10 }, T), [{ date: T, start: '12:00', dur: 10 }]);
   assert.deepEqual(SCS.schedulesOf({ schedules: [{ date: 'xx', start: '09:00', dur: 10 }, { date: T, start: '10:00', dur: 0 }] }, T), [{ date: T, start: '10:00', dur: 1 }]);
   assert.deepEqual(SCS.schedulesOf({}, T), []);
 });
 
 test('nextSchedule bertanggal: paling dekat (termasuk yang sedang jalan)', () => {
-  const NOW = Date.UTC(2026, 8, 25, 13, 49); // 25-09 20:49 WIB
+  const NOW = Date.UTC(2026, 8, 25, 13, 49);
   const slots = [
     { date: '2026-09-25', start: '20:50', dur: 10 },
     { date: '2026-09-26', start: '09:00', dur: 10 },
   ];
   assert.equal(SCS.nextSchedule(NOW, slots).start, '20:50');
   assert.equal(SCS.nextSchedule(Date.UTC(2026, 8, 25, 13, 55), slots).active, true);
-  assert.equal(SCS.nextSchedule(Date.UTC(2026, 8, 26, 3, 0), slots), null); // semua lewat
+  assert.equal(SCS.nextSchedule(Date.UTC(2026, 8, 26, 3, 0), slots), null);
 });
 
 test('wibDateTimeMs: konversi WIB ke epoch', () => {
@@ -137,7 +135,7 @@ test('wibDateTimeMs: konversi WIB ke epoch', () => {
 test('format tanggal Indo + tolak tanggal tak nyata', () => {
   assert.equal(SCS.formatIDDate('2026-09-25'), 'Jum, 25 Sep 2026');
   assert.equal(SCS.formatIDDate('2026-09-26'), 'Sab, 26 Sep 2026');
-  assert.equal(SCS.formatIDDate('2026-02-31'), null); // 31 Feb tidak ada
+  assert.equal(SCS.formatIDDate('2026-02-31'), null);
   assert.equal(SCS.formatIDDate('xx'), null);
   assert.equal(SCS.formatIDSlot({ date: '2026-09-25', start: '21:00', dur: 10 }), 'Jum 25 Sep • 21:00 (10 mnt)');
 });

@@ -1,9 +1,3 @@
-// CONTOH config Firebase. Cara pakai:
-// 1. Salin file ini menjadi js/firebase-config.js (nama itu yang dibaca web).
-// 2. Isi dari Firebase Console: Build > Realtime Database (buat DB, catat URL),
-//    Project Overview > Add app Web (salin apiKey dkk),
-//    Build > Authentication > Sign-in method > Email/Password > tambah user demo.
-// 3. Jangan commit file asli ke repo publik (ini projek tugas, tetap jaga secret).
 window.FIREBASE_CONFIG = {
   apiKey: 'GANTI_API_KEY',
   authDomain: 'GANTI_PROJECT.firebaseapp.com',

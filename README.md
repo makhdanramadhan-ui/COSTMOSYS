@@ -1,92 +1,82 @@
-# 🐄 SmartCow — monitoring kandang & sprinkler
+# SmartCow
 
-Dashboard **6 DS18B20 + 4 DHT22**, dua ESP32, satu device Firebase `cow-sprinkler-01`.
+SmartCow adalah proyek pemantauan lingkungan kandang dan pengendalian sprinkler yang menggabungkan perangkat embedded, komunikasi nirkabel, Firebase, serta dashboard web. Pengembangannya juga mencakup computer vision untuk mengenali postur sapi dan keberadaan orang dari CCTV.
 
-- **ESP kiri:** 3 DS + 2 DHT → ESP-NOW → kanan.
-- **ESP kanan:** 3 DS + 2 DHT lokal, agregasi kedua sisi, relay GPIO23, Wi-Fi/Firebase.
-- Kontrol otomatis memilih **Suhu DS** atau **THI agregat kandang**. THI memakai suhu rata-rata **6 DS** + RH rata-rata **4 DHT**, bukan suhu DHT atau THI per titik.
+Pengerjaannya tidak berhenti pada menampilkan angka sensor. Sistem perlu membedakan pembacaan terkini dari data yang kedaluwarsa, menjalankan kontrol perangkat tanpa bergantung pada browser, dan membatasi kewenangan pengguna saat mengubah pengaturan atau mengoperasikan sprinkler.
 
-## Wiring FINAL
+Repositori ini memuat aplikasi web, firmware ESP32, aturan akses database, dan pengujiannya. Kode training, bobot, serta evaluasi computer vision dikelola dalam [repositori Machine Learning SmartCow YOLO26n](https://github.com/makhdanramadhan-ui/Machine-Learning-SmartCow-YOLO26n).
 
-| Sinyal | ESP kanan | ESP kiri |
+## Arsitektur sistem
+
+Dua ESP32 membagi pembacaan enam DS18B20 dan empat DHT22. ESP kiri mengirim hasil pengukuran melalui ESP-NOW; ESP kanan menggabungkannya dengan sensor lokal, menjalankan kebijakan kontrol, mengoperasikan SSR, dan bertukar data dengan Firebase. Dashboard membaca telemetry serta mengirim konfigurasi dan perintah melalui Realtime Database.
+
+| Lapisan | Implementasi | Tanggung jawab |
 |---|---|---|
-| DS pertama | GPIO4 → DS1 | GPIO4 → DS4 |
-| DS kedua | GPIO14 → DS2 | GPIO14 → DS5 |
-| DS ketiga | GPIO18 → DS3 | GPIO18 → DS6 |
-| DHT pertama | GPIO19 → DHT1 | GPIO19 → DHT3 |
-| DHT kedua | GPIO25 → DHT2 | GPIO25 → DHT4 |
-| SSR IN | GPIO23 | Tidak dipasang |
+| Perangkat | ESP32, DS18B20, DHT22, SSR | Pengukuran, validasi sensor, dan kontrol sprinkler |
+| Komunikasi lokal | ESP-NOW | Pengiriman sampel antar-board dengan ACK, sequence, dan retry |
+| Layanan data | Firebase Realtime Database dan Authentication | Telemetry, konfigurasi, status, identitas, dan izin akses |
+| Dashboard | HTML, CSS, JavaScript | Monitoring, grafik, pengaturan, operasi manual, dan administrasi akun |
+| Computer vision | YOLO26n, Ultralytics, PyTorch, OpenCV, Roboflow | Pengolahan CCTV dan deteksi objek, dikembangkan terpisah |
 
-VCC sensor **3V3**, GND lokal masing-masing ESP. Setiap DATA DS punya pull-up fisik **4,7 kΩ** sendiri. DATA DHT memakai pull-up **4,7–10 kΩ** ke 3V3 bila belum ada pada modul. **GPIO20 tidak tersedia pada ESP32 klasik/WROOM-32.** GPIO21/22/26 tetap tersedia untuk rencana mic, belum ada kode mic.
+Arsitektur ini memisahkan antarmuka pengguna dari keputusan relay. Browser tidak menjalankan timer otomatis atau mengirim perintah OFF atas nama perangkat. Setelah konfigurasi diterima, ESP kanan dapat melanjutkan kontrol lokal ketika internet terputus, selama persyaratan sensor dan waktu masih terpenuhi.
 
-Cabut daya sebelum memindahkan jack/sensor. **Uji tanpa beban AC terlebih dahulu; pengerjaan 220 V harus oleh orang kompeten.** Detail wiring, pairing radio, library, dan checklist di [panduan firmware](firmware/smart-cow-sprinkler-firebase/README-DUA-ESP.md).
+## Keputusan teknis
 
-## Upload firmware
+### Pembacaan yang bisa dipercaya
 
-1. Arduino IDE: board **ESP32 Dev Module**. Library **OneWire**, **DallasTemperature**, **DHT sensor library (Adafruit)**, **Adafruit Unified Sensor**, dan **ArduinoJson v7** untuk kanan.
-2. Buka `firmware/smart-cow-sprinkler-firebase/espkanan_FINAL/espkanan_FINAL.ino` bersama `ClimatePolicy.h` di folder yang sama. Pertahankan/isi konfigurasi Wi-Fi dan Firebase lokal, samakan `ESPNOW_CHANNEL` dengan kanal tetap router 2,4 GHz.
-3. Upload kanan, buka Serial Monitor **115200**, catat MAC STA kanan.
-4. Isi `RIGHT_MAC` pada `firmware/smart-cow-sprinkler-firebase/espkiri_FINAL/espkiri_FINAL.ino`, samakan kanal, upload kiri.
-5. Pastikan ACK diterima, DS **6/6** dan RH **4/4**. Uji kehilangan sensor/link sebelum menghubungkan solenoid.
+Setiap kanal memiliki informasi validitas dan usia sampel. Angka terakhir yang masih tersimpan tidak langsung dianggap sebagai kondisi terkini. Dashboard mempertahankan posisi enam kartu suhu dan empat kartu kelembapan saat sensor terputus, menandai data yang tidak tersedia, dan tidak menganggap relay offline sebagai relay OFF.
 
-Setiap sketch berada di folder sendiri. FINAL memakai paket **v3, 56 byte**; jangan dipasangkan dengan DS-only atau versi AHT lama. Varian DS-only, tes DHT mandiri, dan firmware legacy tetap terpisah; tes DHT mandiri memakai GPIO4/14, **bukan pin FINAL**.
+Konversi DS18B20 dijadwalkan tanpa menahan seluruh loop selama menunggu hasil. Firmware kanan memisahkan pekerjaan HTTP/TLS ke task tersendiri dan bertukar snapshot melalui queue. Pembacaan serta keputusan kontrol tidak perlu menunggu satu siklus permintaan jaringan selesai.
 
-**Pembaruan THI memerlukan upload ulang kanan v3.1.** Kiri FINAL v3 tidak berubah dan tetap kompatibel. Web memblokir Simpan/aktivasi otomatis baru sampai menerima telemetry fresh dengan `controlPolicyVersion=2`; jangan hanya memperbarui web. Firmware baru masih membaca setting suhu legacy sampai pengguna menyimpan profil v2; jadwal pada firmware baru selalu bersyarat threshold.
+### Kebijakan kontrol pada perangkat
 
-## Dashboard & Firebase
+Kontrol otomatis dapat memakai rata-rata suhu enam DS18B20 atau THI agregat dari suhu DS dan kelembapan empat DHT22. Kedua dasar kontrol memiliki profil terpisah untuk threshold, hysteresis, durasi maksimum, cooldown, dan hingga enam jadwal bertanggal dalam WIB.
 
-Alamat Hosting: **https://smartcow-de25f.web.app**. Login memakai akun **Firebase Authentication Email/Password yang sudah dibuat**, bukan akun Google/Firebase Console kecuali email itu memang didaftarkan sebagai user Authentication.
+Jadwal diperlakukan sebagai jendela izin operasi, bukan perintah paksa ON. Threshold dan seluruh pengaman tetap diperiksa di dalamnya. Auto suhu membutuhkan keenam DS valid dan fresh; auto THI membutuhkan seluruh enam DS dan empat RH. Ketika input yang diwajibkan tidak memenuhi syarat, relay otomatis OFF.
 
-- Konfigurasi publik ada di `js/firebase-public.js`: API key project bukan password akun. Password dimasukkan melalui formulir login; tidak dibundel di website.
-- `js/firebase-config.js` lokal lama dipertahankan tetapi **tidak dimuat/dipublikasikan**.
-- UI menampilkan 6 kartu DS dan 4 kartu DHT secara tetap, node kanan/kiri, validitas, rata-rata, THI, grafik suhu/RH/THI, riwayat 120 baris, dan CSV termasuk THI.
-- Sensor hilang/stale ditampilkan **—**, bukan nol. LIVE membutuhkan telemetry terkini; relay offline ditampilkan **belum diketahui**, bukan diasumsikan OFF.
-- Login/reload tidak menimpa control Firebase dengan konfigurasi browser. Web mengirim pengaturan/perintah, **ESP kanan sendiri** menjalankan kontrol lokal; menutup browser tidak mematikan otomatisasi.
-- **Suhu / THI** menyimpan profil terpisah: threshold, hysteresis, durasi maksimum, cooldown, cara menjalankan, dan maksimal enam jendela jadwal bertanggal (WIB). Hanya profil terpilih yang mengendalikan relay. Edit/pindah profil/jadwal masih draft; klik **Simpan Pengaturan** untuk menerapkan. Tombol Manual/Otomatis mengubah mode secara langsung memakai profil terakhir tersimpan, bukan draft.
+Pengaturan pada dashboard dipisahkan antara draft dan konfigurasi terapan. Berpindah profil tidak langsung mengubah kontrol; pengaturan baru diterapkan setelah disimpan. Mode manual memiliki perilaku tersendiri: ON bertahan sampai perintah OFF, termasuk ketika internet terputus, tanpa batas durasi dan cooldown otomatis.
 
-Untuk preview lokal gunakan server HTTP, misalnya `python -m http.server 8080`; buka `http://localhost:8080`. Bukan mode simulasi, dan SDK/login membutuhkan internet.
+### Izin akses yang ditegakkan di database
 
-### Deploy
+Firebase Authentication memeriksa identitas, sementara Database Rules membatasi akses berdasarkan record pengguna. Izin Monitoring, Pengaturan, dan Operasi sprinkler dibedakan hingga tingkat field. Menyembunyikan tombol di browser bukan satu-satunya pengaman; aturan yang sama berlaku untuk permintaan API langsung.
 
-```sh
-node scripts/prepare-hosting.cjs
-firebase deploy --only hosting,database --project smartcow-de25f
-```
+Pembuatan akun memakai instance Auth terpisah agar sesi Admin tidak terganti. Penghapusan akses aplikasi dibedakan dari penghapusan identitas Firebase Auth. Akun Admin yang sudah ada tidak dapat diubah atau dihapus melalui dashboard, dan pencabutan izin tidak diam-diam mengubah keadaan sprinkler.
 
-Hosting hanya memuat hasil salinan allowlist di `public/`, bukan seluruh repository. Firmware, konfigurasi login lama, dan secrets tidak ikut. Rules tetap mewajibkan autentikasi; mendukung telemetry FINAL dengan nol DS valid dan `avg` tidak ada, tanpa rata-rata palsu. Deploy rules tidak mengubah data/control perangkat.
+## Dashboard
 
-## Kontrak data
+Antarmuka berbahasa Indonesia menampilkan ringkasan suhu, kelembapan, THI, status sprinkler, serta rincian tiap kanal. Grafik, riwayat hingga 120 baris, ekspor CSV, dan catatan aktivitas membantu pemeriksaan pembacaan dan tindakan perangkat. THI digunakan sebagai indikator lingkungan agregat, bukan diagnosis kondisi sapi.
 
-```text
-devices/cow-sprinkler-01/
-  telemetry/latest       sekitar 2 detik jika koneksi lancar
-  telemetry/log/{id}     sekitar 30 detik, ESP kanan yang menulis
-  control                dibaca ESP kanan sekitar 5 detik
-  events/{id}
-  status                 heartbeat sekitar 30 detik
-```
+Dashboard dibangun tanpa framework UI, dengan tema terang/gelap, navigasi responsif, popup rincian sensor, dan dukungan reduced motion. Penanganan sesi menunggu pemulihan identitas serta izin sebelum membuka konten privat. Logout atau perubahan akses membersihkan data tampilan dan subscription terkait.
 
-- `t1`–`t6`, `avg`, `validMask`, `validCount`, `complete`, `temperatureAgeMs`: suhu DS; bit 0–5 = DS1–DS6.
-- `h1`–`h4`, `humidityAvg`, `humidityValidMask`, `humidityValidCount`, `humidityComplete`, `humidityAgeMs`: RH; bit 0–3 = DHT1–DHT4.
-- `d1`–`d4`: suhu DHT untuk pembanding, tidak masuk `avg` DS.
-- `thi`, `thiComplete`: THI hanya tersedia saat semua 6 DS + 4 RH valid/fresh. Rumus: `(1.8*T+32) - (0.55-0.0055*RH)*(1.8*T-26)`. Contoh T=30 °C, RH=70% → THI=81,38. Ini indikator lingkungan agregat, bukan diagnosis stres hewan.
-- `controlPolicyVersion=2`, `controlBasis=temperature|thi` pada control/telemetry/status. Control memuat `tempThreshold`, `thiThreshold`, `tempHysteresis`, `thiHysteresis`, `tempMaxDuration`, `thiMaxDuration`, `tempCooldown`, `thiCooldown`, `tempAutoSrc`, `thiAutoSrc`, serta `tempSchN`/`thiSchN` dan slot `tempSch1Date/Start/Dur`–6 / `thiSch1Date/Start/Dur`–6. Field legacy tetap berisi profil **suhu**, tidak pernah angka THI.
-- `leftOnline`, `leftAgeMs`, `ssr`, `mode`, `autoSrc`, `schemaVersion=3`, `measuredTs`, `ts`.
-- Nilai suhu DS invalid bisa masih berupa angka terakhir/-127 di database; **mask + usia** menentukan kelayakan, bukan angka saja. RH invalid/null hilang dari RTDB; jangan ubah field hilang menjadi 0%RH.
+Publikasi web menggunakan allowlist aset melalui `scripts/prepare-hosting.cjs`. Firmware, konfigurasi privat, dan berkas pengembangan tidak ikut diterbitkan. Alamat Hosting proyek: [smartcow-de25f.web.app](https://smartcow-de25f.web.app).
 
-## Kontrol & batas pilot
+## Computer vision untuk CCTV
 
-- **Auto suhu:** wajib 6/6 DS valid/fresh. Kurang satu DS atau kiri stale → relay OFF. Default threshold 30 °C, hysteresis 1 °C, maksimum 120 detik, cooldown 60 detik.
-- **Auto THI:** wajib 6/6 DS + 4/4 RH valid/fresh. Satu input hilang/stale → OFF. Default contoh threshold **72**, hysteresis **2 poin THI**, maksimum **120 detik**, cooldown **60 detik**; perlu disesuaikan dengan protokol lapangan, bukan ambang diagnosis universal.
-- **Sepanjang waktu:** threshold profil terpilih selalu diperiksa. **Dalam jadwal:** slot adalah jendela waktu, bukan paksa ON; di luar slot OFF. Di dalam slot threshold/hysteresis, kelengkapan sensor, durasi maksimum, dan cooldown semuanya tetap berlaku. Jadwal membutuhkan NTP; slot bertanggal boleh melintasi tengah malam. Contoh THI threshold 72, slot 14:00–14:10: THI 68 → tetap OFF; THI ≥72 → boleh ON, paling lambat OFF 14:10. Jika nilai tetap tinggi setelah maksimum/cooldown, siklus bisa berulang selama slot masih aktif.
-- **Manual:** ON sampai perintah OFF, termasuk saat internet putus; tidak memakai kelengkapan sensor/durasi maksimum/cooldown otomatis. Uji tanpa AC terlebih dahulu.
-- Boot relay OFF, konfigurasi default sampai Firebase control terbaca; belum ada penyimpanan pengaturan tahan reboot.
-- Radio 15 m, kualitas RH, kabel, dan keselamatan kelistrikan belum diuji di kandang. TLS `setInsecure()`, Database Secret legacy, serta ESP-NOW tanpa enkripsi masih batas pilot, bukan desain produksi. Rotasi kredensial yang pernah terbagikan; jangan commit secret lokal.
+Pengembangan ML menggunakan YOLO26n untuk mendeteksi `cow_standing`, `cow_lying`, dan `person`. Frame dipilih dari rekaman CCTV berdasarkan kualitas serta keragaman waktu, kemudian dilabeli otomatis melalui Roboflow. Sebanyak 999 gambar dibagi berdasarkan sesi rekaman menjadi 599 training, 152 validasi, dan 248 test.
 
-## Verifikasi
+Model di-fine-tune melalui Ultralytics dan PyTorch menggunakan CPU. Evaluasi pada test set menghasilkan mAP50 0.858 dan mAP50-95 0.551. Angka ini menunjukkan kesesuaian dengan label otomatis Roboflow, bukan akurasi operasional di kandang. Pengujian inferensi juga mencakup satu video penuh sekitar 28 menit dengan prediksi setiap frame.
 
-```sh
-node --test test/core.test.js test/telemetry.test.js test/control.test.js
-```
+Jalur CCTV dijalankan pada komputer atau server, bukan ESP32. Hasilnya belum dihubungkan ke Firebase atau dashboard dalam repositori ini. Pelacakan identitas sapi dan perhitungan durasi berdiri/berbaring per individu juga belum divalidasi; postur berbaring tidak otomatis berarti tidur.
 
-54 unit test mencakup THI, profil independen, migrasi setting, jadwal bersyarat, proteksi otomatis, dan normalisasi/freshness DS–DHT. FINAL kanan/kiri berhasil dikompilasi sebagai `.ino` untuk `esp32dev`, Arduino-ESP32 **2.0.17**, OneWire 2.3.8, DallasTemperature 4.0.6, DHT 1.4.7, Unified Sensor 1.1.15, ArduinoJson 7.4.3. Cabang callback core 3.x tersedia tetapi belum dikompilasi pada core 3.x. Uji browser/emulator bukan pengganti upload dan uji perangkat nyata.
+Detail dataset, konfigurasi training, bobot `best.pt`, contoh label versus prediksi, dan hasil evaluasi tersedia di [Machine Learning SmartCow YOLO26n](https://github.com/makhdanramadhan-ui/Machine-Learning-SmartCow-YOLO26n). Dataset serta video penuh tidak diduplikasi di sini.
+
+## Pengujian dan status pengembangan
+
+Tes aplikasi mencakup perhitungan suhu/THI, freshness sensor, profil kontrol, jadwal bersyarat, izin akun, dan server preview. Pengujian Rules memakai emulator Auth/Realtime Database pada proyek demo terpisah, bukan data produksi. Generator Rules menyediakan pemeriksaan agar konfigurasi hasil generasi tetap sesuai sumbernya.
+
+Firmware FINAL sebelumnya berhasil dikompilasi pada Arduino-ESP32 2.0.17 dengan library sensor dan ArduinoJson yang dicatat dalam panduan firmware. Callback core 3.x tersedia, tetapi kompilasi pada core tersebut belum diverifikasi. Pengujian perangkat fisik, ketepatan sensor, jangkauan radio, dan keselamatan instalasi tetap perlu dilakukan di lokasi.
+
+SmartCow masih merupakan pilot. TLS firmware masih memakai `setInsecure()`, autentikasi perangkat menggunakan Database Secret legacy, dan ESP-NOW belum dienkripsi. Pengaturan juga belum persisten setelah reboot. Batas tersebut tidak disamakan dengan kesiapan produksi atau jaminan keselamatan.
+
+## Dokumentasi teknis
+
+| Dokumen | Isi |
+|---|---|
+| [Firmware dua ESP32](firmware/smart-cow-sprinkler-firebase/README-DUA-ESP.md) | Wiring, library, pairing, upload, kontrak data, kebijakan relay, dan checklist perangkat |
+| [Admin dan User](docs/ADMIN-USER.md) | Peran, izin, pengelolaan akun, Database Rules, dan pengujian emulator |
+| [Antarmuka dan preview](docs/UI-PREVIEW.md) | Menjalankan dashboard lokal, perilaku sesi, dan pengujian antarmuka |
+| [Spesifikasi produk](PRODUCT.md) | Cakupan fitur dan batas pengoperasian |
+| [Istilah proyek](CONTEXT.md) | Definisi istilah pengukuran dan kontrol |
+| [Model YOLO26n](https://github.com/makhdanramadhan-ui/Machine-Learning-SmartCow-YOLO26n) | Dataset, training, bobot, dan evaluasi ML |
+
+Instalasi SSR dan solenoid 220 V harus ditangani orang kompeten, dengan pengujian awal tanpa beban AC. Jangan menyimpan password atau Database Secret dalam repositori publik; kredensial yang pernah terekspos perlu dirotasi.

@@ -1,4 +1,3 @@
-// Account UI. Firebase Rules independently enforce role and target restrictions.
 (function(){
   const el=id=>document.getElementById(id);
   let stop=null,epoch=0,busy=false,deleteResolve=null;
@@ -23,7 +22,6 @@
     return (words.length>1?words[0][0]+words[words.length-1][0]:name.slice(0,2)).toLocaleUpperCase('id');
   }
   function syncCurrentAccount(){
-    // This is the session's own access record, never the first account in the directory.
     const account=allowed()?window.smartcowAccess:null;
     const email=account?.email||'',fallback=email.split('@')[0]||'Pengelola';
     const name=account?(account.name?.trim()||fallback.charAt(0).toUpperCase()+fallback.slice(1)):'';

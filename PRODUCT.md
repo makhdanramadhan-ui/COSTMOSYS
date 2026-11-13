@@ -1,4 +1,4 @@
-# Product
+# SmartCow
 
 <!-- impeccable:product-schema 1 -->
 
@@ -8,46 +8,49 @@ web
 
 ## Users
 
-Pengguna utama: peternak di kandang. Membuka dashboard dari HP saat kerja harian untuk memantau suhu kandang dan memastikan penyemprot berjalan saat sapi kepanasan. Berhasil = sapi tidak stres panas, data suhu jelas, dan kontrol semprot bisa diandalkan dari web.
+Pengelola kandang menggunakan dashboard melalui ponsel atau komputer untuk membaca kondisi lingkungan dan mengoperasikan sprinkler. Admin mengelola akses akun; User memperoleh izin Monitoring, Pengaturan, dan Operasi sprinkler sesuai tugasnya.
 
 ## Product Purpose
 
-Memberi peternak kepastian kondisi kandang lewat monitoring 6 titik suhu DS18B20 + rata-rata, dan mengendalikan sprinkler solenoid (via SSR) secara otomatis berbasis ambang suhu, dengan opsi manual. Sukses berarti: semprotan menyala tepat saat rata-rata menyentuh threshold, tercatat di log, dan peternak selalu bisa override manual.
+SmartCow menghubungkan pembacaan enam DS18B20 dan empat DHT22 dengan kontrol sprinkler pada dua ESP32. Dashboard menampilkan suhu, kelembapan, THI, dan status perangkat. Pengguna dapat memilih kontrol otomatis berdasarkan suhu atau THI, atau mengoperasikan relay secara manual.
 
 ## Positioning
 
-Satu dashboard yang menggabungkan tiga hal yang biasanya terpisah: pantau 6 titik + rata-rata kandang, logika proteksi sapi (threshold + hysteresis + batas durasi + cooldown), dan bukti kerja (grafik + log 1 jam + event) yang bisa ditunjukkan ke dosen/mitra — tetap jalan dalam mode simulasi tanpa hardware.
+Pemantauan lingkungan, konfigurasi sprinkler, dan riwayat pembacaan tersedia dalam satu dashboard. Keputusan relay tetap dijalankan ESP kanan, bukan browser. THI merupakan indikator lingkungan agregat, bukan diagnosis kondisi sapi.
 
 ## Operating Context
 
-Dipakai di kandang (HP, koneksi tidak selalu stabil) dan saat demo tugas semester 5. Alur harian: cek rata-rata dan status → biarkan mode otomatis bekerja → ambil alih manual bila perlu → unduh/cek log 1 jam terakhir sebagai laporan. Evaluasi juga memakai mode simulasi saat ESP32 tidak tersambung.
+Sistem ditujukan untuk pilot di kandang dengan koneksi yang dapat terputus. Pengguna memeriksa pembacaan dan status, menyimpan profil kontrol, serta meninjau riwayat atau mengunduh CSV. Data perangkat yang tidak tersedia atau kedaluwarsa ditandai secara eksplisit; aplikasi tidak menggantinya dengan data simulasi.
 
 ## Capabilities and Constraints
 
-- 6× DS18B20 satu bus OneWire di GPIO4 sebagai variabel suhu; threshold default ~30.0°C, hysteresis 1.0°C, durasi semprot maks 120 dtk, cooldown 60 dtk (dapat diubah, tersimpan di browser dan dikirim ke ESP32).
-- Backend Firebase sebagai satu-satunya sumber data: Realtime Database (`devices/cow-sprinkler-01/...`) untuk telemetri 2 dtk, log 30 dtk, kontrol web-ke-ESP32, event, dan status; Hosting untuk deploy web statis. Login web pakai akun demo Email/Password; firmware pakai Database Secret (file .ino tidak disebar).
-- Jadwal semprot harian (jam mulai WIB + lama menit) yang memaksa sprinkler nyala di mode otomatis; dieksekusi ESP32 berdasar jam NTP.
-- Waktu dan log selalu zona Asia/Jakarta (WIB); log suhu tiap 30 dtk, maks 120 baris (1 jam), tersimpan di localStorage, bisa export CSV.
-- UI Bahasa Indonesia. Web statis (HTML/CSS/JS tanpa build step), harus tetap bisa dibuka langsung dari `index.html` dan jalan offline kecuali fitur MQTT.
-- Batasan fisik: solenoid AC 220V via SSR + steker mitra — keselamatan tegangan tinggi tidak ditawar.
-- Belum diputuskan: broker final untuk deployment kandang; penamaan/posisi pasti keenam titik sensor di kandang nyata.
+- ESP kiri membaca tiga DS18B20 dan dua DHT22, lalu mengirim hasil melalui ESP-NOW. ESP kanan membaca sensor lokal dengan jumlah yang sama, menggabungkan data, mengoperasikan SSR GPIO23, dan berkomunikasi dengan Firebase.
+- Setiap DS menggunakan jalur DATA terpisah pada GPIO4/14/18. DHT memakai GPIO19/25 di masing-masing board. Pin dan pull-up dijelaskan dalam panduan firmware.
+- Rata-rata suhu hanya memakai DS18B20. THI memakai rata-rata enam DS dan rata-rata empat RH, bukan suhu DHT.
+- Profil Suhu dan THI menyimpan threshold, hysteresis, durasi maksimum, cooldown, dan hingga enam jadwal bertanggal WIB secara terpisah. Perubahan draft diterapkan setelah pengguna menyimpan pengaturan.
+- Jadwal merupakan jendela waktu yang tetap mensyaratkan threshold dan pengaman otomatis. Jadwal tidak memaksa relay ON.
+- Auto suhu membutuhkan enam DS valid dan fresh; auto THI membutuhkan enam DS dan empat RH valid dan fresh. Input yang tidak lengkap membuat relay otomatis OFF.
+- Manual ON bertahan sampai perintah OFF, termasuk saat koneksi internet terputus; batas durasi dan cooldown otomatis tidak berlaku pada mode manual.
+- Firebase Realtime Database menyimpan telemetry, control, events, dan status. Firebase Authentication serta Database Rules mengatur akses dashboard. ESP kanan menggunakan Database Secret legacy yang harus dijaga secara terpisah.
+- Antarmuka berupa HTML, CSS, dan JavaScript tanpa build framework. Jalankan melalui server HTTP; SDK Firebase dan login membutuhkan internet. Waktu ditampilkan dalam WIB, dengan riwayat hingga 120 baris dan ekspor CSV.
+- Beban solenoid AC 220 V memerlukan SSR, isolasi, dan instalasi yang sesuai. Uji tanpa beban AC terlebih dahulu; pengerjaan kelistrikan harus dilakukan orang kompeten.
 
 ## Brand Commitments
 
-Nama: Smart Cow Sprinkler System. Bahasa: Indonesia. Satuan suhu °C, waktu WIB. Tidak ada logo, testimoni, atau klaim pelanggan — jangan difabrikasi.
+Nama produk: SmartCow. Antarmuka menggunakan Bahasa Indonesia, suhu dalam °C, kelembapan dalam %RH, dan waktu WIB. Tidak ada klaim pelanggan, keberhasilan mengurangi stres panas, atau hasil lapangan yang belum dibuktikan.
 
 ## Evidence on Hand
 
-Implementasi berjalan di `index.html` + `css/style.css` + `js/app.js` + `js/config.js`; contoh firmware ESP32 di `firmware/smart-cow-sprinkler.ino`; wiring dan cara pakai di `README.md`. Belum ada data sensor nyata, foto kandang, atau hasil uji coba — semua angka saat ini dari simulasi.
+Dashboard tersedia di `index.html`, `css/style.css`, dan `js/`. Firmware aktif berada di folder `espkanan_FINAL` dan `espkiri_FINAL`; varian lama dipertahankan terpisah. Tes Node.js memeriksa logika dan kontrak aplikasi, sedangkan pengujian Rules memakai emulator lokal. Hasil kompilasi dan checklist perangkat ada dalam panduan firmware; keduanya tidak menggantikan pengujian fisik di kandang.
 
 ## Product Principles
 
-1. Keselamatan sapi dan manusia dulu: proteksi durasi, cooldown, dan kelistrikan di atas kenyamanan fitur.
-2. Data jujur dan terbukti: setiap klaim semprotan harus bisa dilacak di grafik, log, dan event.
-3. Kontrol peternak selalu menang: override manual harus satu ketuk dan tidak pernah terkunci oleh otomasi.
-4. Jalan dulu, mewah belakangan: simulasi dan offline-first menjamin dashboard berguna sebelum hardware tersambung.
-5. Satu bahasa satu zona waktu: Indonesia dan WIB di semua label, log, dan export agar tidak ada salah tafsir.
+1. Bedakan pembacaan valid, data kedaluwarsa, dan status perangkat yang belum diketahui.
+2. Jalankan pengaman otomatis pada perangkat, terpisah dari sesi dashboard.
+3. Pisahkan izin membaca data, menyimpan pengaturan, dan mengoperasikan sprinkler.
+4. Pertahankan riwayat dan status yang dapat diperiksa tanpa mengarang data perangkat.
+5. Utamakan keselamatan pemasangan dan kejelasan perilaku manual maupun otomatis.
 
 ## Accessibility & Inclusion
 
-Dipakai di kandang lewat HP, sering di bawah cahaya terang dan dengan satu tangan: angka suhu besar dan kontras, tombol kontrol besar, serta tetap terbaca di layar kecil. Standar formal belum ditetapkan.
+Dashboard perlu terbaca pada ponsel di area kandang, dengan angka yang jelas, kontrol yang dapat dijangkau, fokus keyboard terlihat, dan status yang tidak bergantung pada warna saja. Tema terang/gelap, tampilan responsif, dan preferensi reduced motion dipertahankan. Pengujian antarmuka tidak dianggap sebagai sertifikasi aksesibilitas formal.

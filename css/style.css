@@ -1,4 +1,3 @@
-/* SmartCow / Barn Console — soft-depth surfaces, functional color, no UI dependencies. */
 :root, :root[data-theme="light"] {
   color-scheme: light;
   --bg: #e9edf3; --card: #e9edf3; --card2: #e0e6ee; --line: #bdc6d3;
@@ -51,7 +50,6 @@ button, a, input, select { touch-action: manipulation; }
 .icon-button:active { box-shadow: var(--inset); }
 .muted-icon { color: var(--muted); }
 
-/* A neutral session gate avoids flashing the login page during auth restoration. */
 .session-panel { min-height: 100svh; display: grid; place-items: center; padding: 24px; background: var(--bg); }
 .session-card { width: min(420px, 100%); text-align: center; padding: 36px 24px; border: 1px solid var(--edge); border-radius: 26px; box-shadow: var(--shadow); }
 .session-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--txt); font-size: 30px; font-weight: 750; letter-spacing: -1px; }
@@ -66,7 +64,6 @@ button, a, input, select { touch-action: manipulation; }
 .view-in { animation: view-in 400ms var(--motion-ease) both; }
 @keyframes view-in { from { opacity: 0; } to { opacity: 1; } }
 
-/* A real entry page, not a modal over an unauthenticated dashboard. */
 .auth-page { min-height: 100svh; display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); color: var(--txt); padding: 28px; gap: 24px; }
 .auth-story { background: #252d3a; border-radius: 26px; padding: 36px 42px 24px; display: flex; flex-direction: column; color: #f1f5fc; position: relative; overflow: hidden; border: 1px solid #ffffff12; box-shadow: var(--shadow); }
 .auth-brand { align-self: flex-start; position: relative; }
@@ -128,7 +125,6 @@ button, a, input, select { touch-action: manipulation; }
 .auth-entry-footer { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); line-height: 1.7; }
 .noscript-note { position: fixed; bottom: 15px; left: 15px; right: 15px; background: #faeae4; color: #a3473b; padding: 15px; border-radius: 12px; text-align: center; z-index: 99; }
 
-/* Workspace frame */
 .app-shell { min-height: 100vh; --sidebar-width: 272px; }
 .skip-link { position: fixed; top: -100px; left: 12px; z-index: 100; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
 .skip-link:focus { top: 8px; }
@@ -168,7 +164,6 @@ button, a, input, select { touch-action: manipulation; }
 .topbar-avatar { border: 1px solid var(--line); cursor: pointer; }
 .profile-wrap { position: relative; }
 .profile-menu { position: absolute; right: 0; top: calc(100% + 12px); width: min(290px, calc(100vw - 32px)); padding: 18px; display: grid; gap: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); box-shadow: var(--shadow); z-index: 60; overflow-wrap: anywhere; }
-/* Admin: one quiet form, separate account cards, and tactile permission controls. */
 .admin-heading .page-tag { box-shadow: var(--raised-sm); border-color: var(--edge); }
 .admin-feedback:empty { display: none; }
 .admin-feedback:not(:empty) { padding: 14px 18px; border: 1px solid var(--line); border-left: 3px solid var(--blue); border-radius: 10px; color: var(--txt); background: var(--card); font-size: 14px; line-height: 1.7; }
@@ -456,7 +451,6 @@ button, a, input, select { touch-action: manipulation; }
 .control-actions .save-note { text-align: left; margin: 0 !important; }
 .control-actions .btn.full { width: auto; min-width: 240px; margin: 0; }
 .insights-grid .chart-card #chart { height: 280px; }
-/* Follow the actual panel width, including when the desktop sidebar is open. */
 @container sprinkler-config (min-width: 680px) {
   .control-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .control-layout .src-card { min-height: 96px; }
@@ -592,7 +586,6 @@ td.cold { color: var(--positive-txt); }
 .side-overlay { position: fixed; inset: 0; z-index: 70; background: #111b2b80; backdrop-filter: blur(3px); opacity: 0; visibility: hidden; transition: opacity 280ms ease, visibility 0s 280ms; }
 .side-overlay.show { opacity: 1; visibility: visible; transition: opacity 280ms ease, visibility 0s; }
 
-/* Live sensor detail is rendered once, inside a native modal rather than the overview. */
 .sensor-dialog { width: min(1120px, calc(100% - 40px)); max-height: calc(100dvh - 48px); padding: 0; border: 1px solid var(--line); border-radius: 24px; background: var(--bg); color: var(--txt); box-shadow: 0 24px 90px #111b2b60; overflow-y: auto; overscroll-behavior: contain; }
 .sensor-dialog::backdrop { background: #111b2b80; backdrop-filter: blur(5px); }
 .sensor-dialog[open] { animation: sensor-dialog-in 340ms var(--motion-ease) both; }
@@ -618,7 +611,6 @@ td.cold { color: var(--positive-txt); }
 .hero-art img { object-position: center; }
 .timer:empty, .mode-info:empty { display: none; }
 
-/* Desktop console, compact field panel on mobile; never shrink readable text to fit. */
 @media (min-width: 1600px) {
   .sensor .s-temp { font-size: 36px; }
 }

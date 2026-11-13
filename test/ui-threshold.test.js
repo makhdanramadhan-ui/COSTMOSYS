@@ -6,7 +6,6 @@ const vm = require('node:vm');
 const C = require('../js/control.js');
 const T = require('../js/telemetry.js');
 const app = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
-// Execute the real rendering functions against a small DOM/canvas double.
 const source = app.slice(app.indexOf('const profileOf ='), app.indexOf('function markSettingsDirty'))
   + app.slice(app.indexOf('function tempColor('), app.indexOf('function refreshTelemetry('))
   + app.slice(app.indexOf('function drawChart('), app.indexOf("window.addEventListener('resize', drawChart)"));

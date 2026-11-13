@@ -1,4 +1,3 @@
-/* SmartCow FINAL — Firebase, 6 DS18B20 + 4 DHT22. Relay milik ESP kanan. */
 const $ = (id) => document.getElementById(id);
 const SENSOR_NAMES = ['Titik 1 • Depan', 'Titik 2 • Depan', 'Titik 3 • Tengah', 'Titik 4 • Tengah', 'Titik 5 • Belakang', 'Titik 6 • Belakang'];
 const COLORS = ['#b64c26','#a26a00','#167866','#3f70c4','#9563bb','#bb507b'];
@@ -12,7 +11,7 @@ let lastUpdate = null;
 let sprinklerOn = false;
 let sprayStart = null;
 let lastSprayEnd = 0;
-let history = [];   // {t, s:[6], avg} tiap 2 detik, maks 1800 (1 jam)
+let history = [];
 let logs = [];
 let events = [];
 try { const saved = JSON.parse(localStorage.getItem('scs_events') || '[]'); if (Array.isArray(saved)) events = saved.slice(0,50); } catch {}
@@ -31,7 +30,6 @@ const profileOf = basis => appliedCfg.profiles[basis];
 const isAppliedBasis = basis => controlLoaded && appliedCfg.controlBasis === basis;
 function markSettingsDirty(){ settingsDirty=true; saveCfg(); $('settingsStatus').textContent='Perubahan belum dikirim. Klik Simpan Pengaturan untuk menerapkan.'; }
 
-// ---------- THEME (light/dark) ----------
 function curTheme(){ return localStorage.getItem('scs_theme') || 'light'; }
 function applyTheme(t){
   document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
@@ -47,7 +45,6 @@ function chartTheme(){
     : { grid: '#46546a', txt: '#b4c1d3', empty: '#b4c1d3', threshold: '#f5cc91', thi: '#8de1cd' };
 }
 
-// ---------- WIB CLOCK ----------
 function tickClock(){
   const now = new Date();
   const fmt = new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
@@ -57,7 +54,6 @@ function tickClock(){
 }
 setInterval(tickClock, 1000); tickClock();
 
-// ---------- SENSOR GRID (posisi tetap; sensor putus tidak menggeser kartu) ----------
 let renderedCount = 6;
 function buildGrid(count){
   renderedCount = count;
@@ -192,7 +188,6 @@ function refreshTelemetry(){
   $('btnLogNow').disabled = !hasAccess('monitor') || !sensorView.online || !fbConnected;
 }
 
-// ---------- SPRINKLER (perintah manual ke ESP32 via Firebase) ----------
 async function setSprinkler(on, reason){
   if (!hasAccess('operate') || !fbConnected || !controlLoaded || !sensorView.online || !transportConnected || CFG.mode !== 'manual' || !window.SCSFirebase){ $('sprinklerReason').textContent = 'Izin, koneksi, atau mode belum siap; perintah tidak dikirim.'; return; }
   try { await SCSFirebase.pushOverride(on, reason); }
@@ -223,7 +218,6 @@ function autoControl(avg){
   if (appliedCfg.mode==='auto' && sensorView.controlBasis!==appliedCfg.controlBasis){ $('sprinklerReason').textContent='Setting tersimpan; menunggu ESP kanan menerapkan dasar kontrol yang dipilih.'; return; }
   const complete=appliedCfg.controlBasis==='thi' ? sensorView.thiComplete : sensorView.complete;
   if(appliedCfg.mode==='auto' && !complete){ $('sprinklerReason').textContent=`Otomatis ${basisName(appliedCfg)} diblokir: perlu ${appliedCfg.controlBasis==='thi' ? '6 DS + 4 DHT' : '6 DS'} valid/fresh.`; return; }
-  // Web TIDAK pernah menjalankan kontrol otomatis atau auto-off sendiri.
   if (appliedCfg.mode === 'manual'){
     $('sprinklerReason').textContent = 'Mode manual · status mengikuti laporan perangkat.';
   } else {
@@ -232,7 +226,6 @@ function autoControl(avg){
   }
 }
 
-// ---------- DATA MASUK (dari Firebase via ESP32) ----------
 function onNewData(raw){
   telemetry = raw;
   refreshTelemetry();
@@ -244,10 +237,9 @@ function onNewData(raw){
   drawChart();
 }
 
-// ---------- CHART (canvas murni, offline-friendly) ----------
 function drawChart(){
   const c = $('chart'), ctx = c.getContext('2d');
-  if (!c.clientWidth) return; // hidden until authenticated or chart page is shown
+  if (!c.clientWidth) return;
   const T = chartTheme();
   const W = c.width = c.clientWidth * 2, H = c.height = 440;
   ctx.clearRect(0,0,W,H);
@@ -275,7 +267,6 @@ function drawChart(){
   }
   const X = i => 60 + (data[i].t-data[0].t)/Math.max(1,data[data.length-1].t-data[0].t)*(W-80);
   const Y = v => 20 + (1-(v-mn)/(mx-mn))*(H-70);
-  // grid + threshold
   ctx.strokeStyle=T.grid; ctx.fillStyle=T.txt; ctx.font='22px sans-serif';
   for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4, y=Y(v);
     ctx.beginPath(); ctx.moveTo(60,y); ctx.lineTo(W-20,y); ctx.stroke();
@@ -309,7 +300,6 @@ $('showAvg').onchange = drawChart;
 $('chartMetric').onchange = () => { renderLegend(); drawChart(); };
 $('btnClearChart').onclick = ()=>{ history=[]; localStorage.removeItem('scs_hist'); drawChart(); };
 
-// ---------- LOG 1 JAM ----------
 function addLogRow(avg){
   if (!sensorView.online) return;
   const row = { t: telemetry.ts, s: temps.slice(), h: humidities.slice(), avg:sensorView.avg,
@@ -347,7 +337,6 @@ $('btnClearEvents').onclick = async ()=>{
     events=[]; localStorage.removeItem('scs_events'); renderEvents();
   }
 };
-// ---------- MODAL KONFIRMASI CUSTOM (pengganti confirm() bawaan, ikut tema) ----------
 let confirmRes = null, confirmReturnFocus = null;
 function askConfirm(title, msg){
   confirmReturnFocus = document.activeElement;
@@ -373,7 +362,6 @@ $('btnExport').onclick = ()=>{
   a.download = 'smartcow-ds-dht.csv'; a.click(); URL.revokeObjectURL(a.href);
 };
 
-// ---------- EVENTS ----------
 function pushEvent(msg){
   events.unshift({ t: Date.now(), msg }); events = events.slice(0,50);
   localStorage.setItem('scs_events', JSON.stringify(events));
@@ -391,7 +379,6 @@ function renderEvents(){
   });
 }
 
-// ---------- MODE + SOURCE (eksklusif: threshold ATAU schedule) ----------
 function curAutoSrc(){
   if (typeof SCS !== 'undefined' && SCS.autoSrcOf) return SCS.autoSrcOf(CFG);
   return CFG.autoSrc || (CFG.schedOn ? 'schedule' : 'threshold');
@@ -401,21 +388,17 @@ function schedActiveNow(){
   return SCS.anyScheduleActive(Date.now(), schedSlots());
 }
 function pad2(n){ return String(n).padStart(2, '0'); }
-// "HH:MM" WIB untuk nowMs+offset (batas bawah jam hari ini).
 function wibHMplus(offsetMs){
   const t = new Date(Date.now() + (offsetMs || 0));
   const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(t);
   const g = (x) => p.find((y) => y.type === x).value;
   return `${pad2((+g('hour')) % 24)}:${g('minute')}`;
 }
-// Kalau tanggal = hari ini, jam otomatis naik ke sekarang+1 mnt (min). Besok/besoknya bebas.
 function clampToday(iso, hm){
   if (iso !== SCS.wibDateStr()) return hm;
   const min = wibHMplus(60000);
   return hm < min ? min : hm;
 }
-// ---------- EDITOR DAFTAR JADWAL (maks 6 slot bertanggal) ----------
-// Aturan: tanggal bebas (min hari ini). Khusus hari ini, jam min = sekarang+1 mnt.
 function renderSchedList(){
   const box = $('schedList'); if (!box) return;
   const locked = !hasAccess('settings') || CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected || savingSettings;
@@ -471,25 +454,22 @@ function renderSchedList(){
     btn.onclick = () => {
       const cur = readSchedList(true);
       cur.splice(+btn.dataset.del, 1);
-      CFG.schedules = cur; // boleh kosong, tidak respawn
+      CFG.schedules = cur;
       markSettingsDirty(); syncButtons();
     };
   });
   const add = $('btnAddSched'); if (add) add.disabled = locked || schedSlots().length >= 6;
 }
 function readSchedList(keepPast){
-  // Nilai jadwal hidup di CFG.schedules (popup menulis langsung ke sana).
-  // Fungsi ini normalisasi: dedupe + buang yang lewat + urut + batasi 6. Boleh kosong.
   const now = Date.now();
   const out = [];
   schedSlots().forEach((s) => {
     if (out.some((o) => o.date === s.date && o.start === s.start)) return;
-    if (!keepPast && SCS.slotState(s, now) === 'past') return; // yang sudah lewat dibuang
+    if (!keepPast && SCS.slotState(s, now) === 'past') return;
     out.push(s);
   });
   return out.slice(0, 6);
 }
-// ---------- POPUP PICKER CUSTOM (kalender + jam 24, ikut tema) ----------
 let popEl = null;
 function closePicker(){
   if (!popEl) return;
@@ -501,12 +481,12 @@ function closePicker(){
 }
 function popOutside(e){
   if (!popEl) return;
-  if (e.target.closest && e.target.closest('[data-pop-anchor]')) return; // biar toggle anchor yang urus
+  if (e.target.closest && e.target.closest('[data-pop-anchor]')) return;
   if (!popEl.contains(e.target)) closePicker();
 }
 function popEsc(e){ if (e.key === 'Escape') closePicker(); }
 function openPop(anchor, key, html){
-  if (popEl && popEl.dataset.for === key){ closePicker(); return null; } // toggle
+  if (popEl && popEl.dataset.for === key){ closePicker(); return null; }
   closePicker();
   popEl = document.createElement('div');
   popEl.className = 'picker-pop';
@@ -520,7 +500,6 @@ function openPop(anchor, key, html){
   document.addEventListener('keydown', popEsc);
   return popEl;
 }
-// Ukur ulang + posisikan popup: bawah dulu, flip ke atas kalau tidak muat (biar tidak ketutup taskbar).
 function placePop(anchor){
   if (!popEl || !anchor) return;
   popEl.style.visibility = 'hidden';
@@ -548,7 +527,6 @@ function commitSlots(slots, msg){
   CFG.schedules = slots.slice(0, 6);
   markSettingsDirty(); syncButtons(); updateSchedHint();
 }
-// --- Kalender popup: min hari ini, maks 31 Des 2030 ---
 function openDatePop(btn, i, s){
   const today = SCS.wibDateStr();
   const cur = /^\d{4}-\d{2}-\d{2}$/.test(s.date) ? s.date : today;
@@ -558,7 +536,7 @@ function openDatePop(btn, i, s){
   const box = el.querySelector('.pk-cal');
   function draw(){
     const first = new Date(Date.UTC(vy, vm - 1, 1));
-    const lead = (first.getUTCDay() + 6) % 7; // Senin=0
+    const lead = (first.getUTCDay() + 6) % 7;
     const dim = new Date(Date.UTC(vy, vm, 0)).getUTCDate();
     let h = `<div class="pk-head"><button data-nav="-1"${vy === 2026 && vm === 1 ? ' disabled' : ''}>‹</button><b>${ID_MON[vm - 1]} ${vy}</b><button data-nav="1"${vy === 2030 && vm === 12 ? ' disabled' : ''}>›</button></div>`;
     h += '<div class="pk-dow">' + ID_DOW.map((d) => `<span>${d}</span>`).join('') + '</div><div class="pk-grid">';
@@ -598,15 +576,13 @@ function openDatePop(btn, i, s){
       closePicker();
     };
     box.querySelector('[data-close]').onclick = closePicker;
-    placePop(btn); // ukur ulang setelah isi kalender ada (tinggi beda tiap bulan)
+    placePop(btn);
   }
   draw();
 }
-// --- Jam popup: 24 jam (00-23) + menit, arrow atas-bawah (tahan = repeat) ---
 function openTimePop(btn, i, s){
   const today = SCS.wibDateStr();
   let curDate = /^\d{4}-\d{2}-\d{2}$/.test(s.date) ? s.date : today;
-  // Batas bawah khusus slot hari ini: sekarang+1 mnt (slot besok bebas 00:00).
   let minH = -1, minM = 0;
   function refreshMin(){
     if (curDate <= today){
@@ -635,7 +611,6 @@ function openTimePop(btn, i, s){
   const vH = el.querySelector('[data-v="h"]'), vM = el.querySelector('[data-v="m"]'), vD = el.querySelector('[data-v="date"]');
   function paintDate(){ if (vD) vD.textContent = SCS.formatIDDate(curDate) || curDate; }
   function paint(){ if (document.activeElement !== vH) vH.value = pad2(hh); if (document.activeElement !== vM) vM.value = pad2(mi); paintDate(); }
-  // Geser jam + rollover tanggal: 23:59 +1 -> 00:00 besok; 00:00 -1 -> 23:xx kemarin (min. hari ini).
   function rollHour(d){
     if (d > 0){
       if (hh >= 23){
@@ -660,7 +635,6 @@ function openTimePop(btn, i, s){
     if (minH >= 0 && (hh < minH || (hh === minH && mi < minM))){ hh = minH; mi = minM; }
     paint();
   }
-  // Ketik langsung: cuma digit, clamp 0-23 / 0-59 + batas bawah slot hari ini.
   function readInputs(){
     let h = parseInt((vH.value || '').replace(/\D/g, '').slice(-2), 10);
     let m = parseInt((vM.value || '').replace(/\D/g, '').slice(-2), 10);
@@ -687,7 +661,7 @@ function openTimePop(btn, i, s){
   el.querySelector('[data-close]').onclick = () => { stopRep(); closePicker(); };
   el.querySelector('[data-ok]').onclick = () => {
     stopRep();
-    readInputs(); // pastikan ketikan terakhir ikut ke-commit
+    readInputs();
     const arr = [...schedSlots()];
     if (!arr[i]){ closePicker(); return; }
     arr[i] = { ...arr[i], date: curDate, start: pad2(hh) + ':' + pad2(mi) };
@@ -696,7 +670,7 @@ function openTimePop(btn, i, s){
   };
 }
 function syncButtons(){
-  if (typeof closePicker === 'function') closePicker(); // anchor lama bisa hilang pas re-render
+  if (typeof closePicker === 'function') closePicker();
   $('btnAuto').classList.toggle('active', CFG.mode==='auto');
   $('btnManual').classList.toggle('active', CFG.mode==='manual');
   $('btnSprayOn').disabled = $('btnSprayOff').disabled = !hasAccess('operate') || CFG.mode!=='manual' || !controlLoaded || !fbConnected || !sensorView.online || !transportConnected;
@@ -722,7 +696,6 @@ function syncButtons(){
   $('scheduleTitle').textContent=`Jendela jadwal ${basisName(CFG)} (maks 6×)`;
   $('controlBasisHint').textContent=`Profil ${basisName(CFG)}: threshold, hysteresis, durasi/cooldown dan jadwal sendiri. ${thi ? 'THI dari rata-rata 6 DS + RH rata-rata 4 DHT.' : 'DHT tidak wajib untuk kontrol suhu.'} Klik Simpan untuk menerapkan.`;
   $('inMaxDur').value = CFG.maxDuration; $('inCooldown').value = CFG.cooldown;
-  // Jadwal tetap memakai threshold serta seluruh proteksi profil terpilih.
   $('threshGroup').style.display = '';
   $('protectGroup').style.display = '';
   $('schedGroup').style.display = isThresh ? 'none' : '';
@@ -763,7 +736,6 @@ async function fbPushControl(){
   }
   finally { savingSettings=false; syncButtons(); refreshTelemetry(); drawChart(); }
 }
-// Info kecil: lagi pake mode apa + ringkasannya.
 function updateModeInfo(){
   const el = $('modeInfo'); if (!el) return;
   const cfg=appliedCfg;
@@ -795,7 +767,6 @@ function sessionStatus(message, failed=false){
 function sessionFailed(){
   sessionStatus('Sesi belum dapat diperiksa. Periksa koneksi internet lalu coba muat ulang.',true);
 }
-// fbStatus hanya tampil saat belum live (sim/error) biar tampilan clean.
 function setFbStatus(msg, kind){
   const el = $('fbStatus'); if (!el) return;
   el.textContent = msg || '';
@@ -805,7 +776,6 @@ function setFbStatus(msg, kind){
   notice.textContent=kind==='err' && fbConnected ? msg : '';
   notice.hidden=!notice.textContent;
 }
-// The shell is never exposed before Firebase confirms an authenticated session.
 function accountNameOf(email){
   if (typeof email !== 'string') return 'Pengelola';
   const at=email.indexOf('@');
@@ -855,7 +825,7 @@ function setAuthView(ok, email=''){
 }
 function fbConnect(){
   $('btnLogin').disabled=true;
-  if (!window.SCSFirebase){ // module SDK belum termuat, coba lagi sebentar
+  if (!window.SCSFirebase){
     fbTries++;
     setFbStatus(fbTries > 12
       ? 'SDK login belum termuat. Periksa internet dan akses gstatic.com, lalu muat ulang. Untuk preview lokal, gunakan http://localhost, bukan file://.'
@@ -940,7 +910,6 @@ $('btnLogout').onclick=async()=>{
   finally { $('btnLogout').disabled=false; }
 };
 
-// ---------- SETTINGS ----------
 function readSettingsInputs(){
   const fields=[['inThreshold','threshold',CFG.controlBasis==='thi' ? 0 : -55,CFG.controlBasis==='thi' ? 120 : 125],
     ['inHysteresis','hysteresis',0,50],['inMaxDur','maxDuration',1,10800],['inCooldown','cooldown',0,10800]];
@@ -972,12 +941,10 @@ $('btnAddSched').onclick = ()=>{
   if (cur.length >= 6) return;
   let ndate, ns;
   if (!cur.length){
-    // Daftar kosong -> besok 09:00 (bebas diubah).
     const t = SCS.wibDateStr(), p = t.split('-').map(Number);
     ndate = new Date(Date.UTC(p[0], p[1] - 1, p[2]) + 86400000).toISOString().slice(0, 10);
     ns = '09:00';
   } else {
-    // Slot baru = 60 mnt setelah slot terakhir; lewat tengah malam -> tanggal maju 1 hari.
     const last = cur[cur.length - 1];
     const h = SCS.hmToMin(last.start);
     const nh = isFinite(h) ? (h + 60) % 1440 : 9 * 60;
@@ -992,7 +959,6 @@ $('btnAddSched').onclick = ()=>{
   markSettingsDirty(); syncButtons();
 };
 
-// ---------- SIDEBAR, SENSOR DETAIL + HALAMAN (dashboard / log / event) ----------
 function mobileNavigation(){ return window.matchMedia('(max-width: 980px)').matches; }
 function reducedMotion(){ return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
 let sideOverlayTimer=null;
@@ -1064,12 +1030,11 @@ function closeSensors(restoreFocus=true){
     if (restoreFocus && fbConnected && sensorReturnFocus?.isConnected) sensorReturnFocus.focus({preventScroll:true});
     sensorReturnFocus=null;
   };
-  // Logout/navigation close immediately: private data must never linger for an exit effect.
   if (!restoreFocus || !fbConnected || reducedMotion()){ finish(); return; }
   sensorCloseHandler=e=>{ if(e.target===dialog && e.animationName==='sensor-dialog-out') finish(); };
   dialog.addEventListener('animationend',sensorCloseHandler);
   dialog.classList.add('is-closing');
-  sensorCloseTimer=setTimeout(finish,240); // Safe fallback if the browser cancels animationend.
+  sensorCloseTimer=setTimeout(finish,240);
 }
 let selectedPage='dash';
 function applyAccessView(){
@@ -1102,7 +1067,6 @@ function showPage(p){
     var show = (!s.dataset.page || s.dataset.page === p);
     if (show){
       s.style.display = '';
-      // fade-in halus tiap ganti halaman (re-trigger paksa biar animasi jalan tiap klik)
       s.classList.remove('page-in');
       s.style.setProperty('--page-delay',`${Math.min(pageIndex++ * 40,160)}ms`);
       void s.offsetWidth;
@@ -1119,15 +1083,13 @@ function showPage(p){
   closeSide();
   window.scrollTo(0, 0);
   if(fbConnected) $('mainContent').focus({preventScroll:true});
-  if (p === 'dash' && typeof drawChart === 'function') drawChart(); // canvas butuh redraw pas tampil lagi
+  if (p === 'dash' && typeof drawChart === 'function') drawChart();
 }
-// ---------- INIT (sumber tunggal: Firebase) ----------
 applyTheme(curTheme());
 $('themeBtn').onclick = ()=> applyTheme(curTheme() === 'light' ? 'dark' : 'light');
 $('menuBtn').addEventListener('click', ()=>{ if ($('sidebar').classList.contains('open')) closeSide(); else openSide(); });
 $('sideClose').addEventListener('click', (e) => { e.stopPropagation(); closeSide(); });
 $('sideOverlay').addEventListener('click', closeSide);
-// Pengaman lapis dua: delegasi klik untuk tombol tutup.
 document.addEventListener('click', (e) => {
   if (e.target && e.target.closest && e.target.closest('#sideClose')) closeSide();
 });
@@ -1156,7 +1118,7 @@ $('confirmYes').onclick = () => closeConfirm(true);
 $('confirmNo').onclick = () => closeConfirm(false);
 $('confirmOverlay').addEventListener('pointerdown', (e) => { if (e.target === $('confirmOverlay')) closeConfirm(false); });
 document.querySelectorAll('.side-link').forEach((b) => { b.addEventListener('click', () => showPage(b.dataset.page)); });
-history=[]; logs=[]; events=[]; // tidak menyajikan cache lama sebagai data live sebelum login
+history=[]; logs=[]; events=[];
 buildGrid(6); buildHumidityGrid(); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
 try { showPage(localStorage.getItem('scs_page') || 'dash'); } catch { showPage('dash'); }
 document.title='Memuat — SmartCow';
@@ -1167,4 +1129,3 @@ sessionWaitTimer=setTimeout(sessionFailed,15000);
 fbConnect();
 setInterval(refreshTelemetry,1000);
 setInterval(() => { updateSchedHint(); updateModeInfo(); }, 30000);
-// Tidak ada penulisan otomatis setting saat login/telemetry/prune; hanya Simpan.

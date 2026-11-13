@@ -1,12 +1,3 @@
-// SmartCow FINAL KIRI: 3 DS18B20 + 2 DHT22 -> ESP-NOW -> kanan -> Firebase.
-// ESP32 klasik Dev Module / WROOM-32. Library: OneWire, DallasTemperature,
-// DHT sensor library (Adafruit). Upload dari folder espkiri_FINAL.
-// Pasangkan HANYA dengan espkanan_FINAL (format paket versi 3).
-// DS DATA: GPIO4/14/18, masing-masing pull-up fisik 4.7k ke 3V3.
-// DHT3 DATA19, DHT4 DATA25. GPIO20 TIDAK ADA pada ESP32 klasik.
-// VCC3V3/GND lokal, pull-up DATA 4.7k-10k ke 3V3 bila modul belum punya.
-// Kabel tes pendek; lindungi DHT dari hujan/matahari/sprinkler, tetap ventilasi.
-// Cabut daya sebelum memasang/melepas jack atau sensor.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -19,13 +10,11 @@
 #include <DallasTemperature.h>
 #include <math.h>
 
-// ISI MAC STA ESP KANAN dari Serial Monitor, bukan MAC router.
-// Contoh format saja: {0xAA, 0xBB, 0xCC, 0x11, 0x22, 0x33}.
 const uint8_t RIGHT_MAC[6] = {0, 0, 0, 0, 0, 0};
-constexpr uint8_t ESPNOW_CHANNEL = 6; // sama dengan kanan + kanal tetap router
-const uint8_t SENSOR_PINS[3] = {4, 14, 18}; // S4, S5, S6
+constexpr uint8_t ESPNOW_CHANNEL = 6;
+const uint8_t SENSOR_PINS[3] = {4, 14, 18};
 const uint8_t DHT_PINS[2] = {19, 25};
-constexpr uint8_t HUMIDITY_LABEL_BASE = 3; // H3, H4
+constexpr uint8_t HUMIDITY_LABEL_BASE = 3;
 constexpr uint32_t CONVERSION_MS = 800;
 constexpr uint32_t SAMPLE_MS = 1000;
 constexpr uint32_t LOCAL_TIMEOUT_MS = 3000;
@@ -35,7 +24,6 @@ constexpr uint32_t SEND_MS = 2000;
 constexpr uint32_t ACK_WAIT_MS = 300;
 constexpr uint8_t MAX_ATTEMPTS = 4;
 
-// Format HARUS identik dengan espkanan_FINAL. Tidak kompatibel versi lama.
 constexpr uint32_t PACKET_MAGIC = 0x53435732;
 constexpr uint8_t PACKET_VERSION = 3;
 constexpr uint8_t PACKET_SAMPLE = 1;
@@ -72,7 +60,6 @@ bool awaitingAck = false;
 WirePacket pendingPacket = {};
 QueueHandle_t ackQueue = nullptr;
 
-// Prototipe eksplisit untuk preprocessor Arduino, termasuk callback core 2/3.
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
 void onReceive(const esp_now_recv_info_t *info, const uint8_t *data, int length);
 #else
@@ -120,7 +107,7 @@ void receiveAck(const uint8_t *mac, const uint8_t *data, int length) {
   memcpy(&packet, data, sizeof(packet));
   if (packet.magic != PACKET_MAGIC || packet.version != PACKET_VERSION ||
       packet.type != PACKET_ACK) return;
-  xQueueOverwrite(ackQueue, &packet); // callback hanya menyalin, tanpa HTTP/delay
+  xQueueOverwrite(ackQueue, &packet);
 }
 
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
@@ -172,7 +159,6 @@ void serviceSensors() {
 }
 
 void sendAttempt() {
-  // Retry: timestamp milik PAKET ini, bukan sampel baru yang muncul sesudahnya.
   pendingPacket.sampleAgeMs = millis() - pendingSampledAt;
   for (int i = 0; i < 2; i++) {
     if (pendingPacket.humidityAgeMs[i] != UINT32_MAX)
@@ -235,7 +221,7 @@ void stopWithError(const char *message) {
 
 void setup() {
   Serial.begin(115200);
-  WiFi.mode(WIFI_STA); // radio aktif, tidak login router
+  WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   Serial.printf("MAC STA ESP KIRI: %s\n", WiFi.macAddress().c_str());
   bool allZero = true;
@@ -251,7 +237,7 @@ void setup() {
   memcpy(peer.peer_addr, RIGHT_MAC, 6);
   peer.channel = ESPNOW_CHANNEL;
   peer.ifidx = WIFI_IF_STA;
-  peer.encrypt = false; // pilot lokal, bukan autentikasi/enkripsi produksi
+  peer.encrypt = false;
   if (esp_now_add_peer(&peer) != ESP_OK) stopWithError("Gagal memasangkan ESP kanan.");
   bootId = esp_random();
   Serial.printf("ESP-NOW v3 kanal %u; tanpa login Wi-Fi/Firebase.\n", ESPNOW_CHANNEL);

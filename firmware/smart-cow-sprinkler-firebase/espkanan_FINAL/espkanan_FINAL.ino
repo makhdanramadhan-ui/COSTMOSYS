@@ -1,18 +1,3 @@
-// SmartCow FINAL KANAN: 3 DS18B20 + 2 DHT22 lokal, sisi kiri via ESP-NOW.
-// Suhu HANYA DS; kontrol pilih suhu atau THI agregat (6 DS + RH 4 DHT).
-// Board: ESP32 klasik Dev Module / WROOM-32. Library: OneWire,
-// DallasTemperature, DHT sensor library (Adafruit), ArduinoJson versi 7.
-// Upload dari folder espkanan_FINAL. Pasangkan HANYA dengan espkiri_FINAL (v3).
-// DS DATA GPIO4/14/18: tiap jalur pull-up fisik 4.7k ke 3V3. SSR IN GPIO23.
-// DHT1 DATA19, DHT2 DATA25. GPIO20 TIDAK ADA pada ESP32 klasik.
-// VCC3V3/GND lokal; pull-up DATA 4.7k-10k ke 3V3 jika belum ada di modul.
-// DHT harus teduh/kering tetapi berventilasi; jauh dari hujan dan sprinkler.
-// Suhu: wajib 6 DS. THI: wajib 6 DS + 4 RH. Gagal/stale -> otomatis OFF.
-// Jadwal = jendela waktu untuk threshold dasar terpilih, BUKAN paksa ON.
-// Threshold/jadwal sama-sama memakai hysteresis/durasi maks/cooldown.
-// Manual ON bertahan sampai perintah OFF, termasuk saat internet putus.
-// Manual ON tidak memakai kelengkapan sensor/durasi maks/cooldown otomatis.
-// Cabut daya saat pindah jack; uji tanpa AC. Pengerjaan 220V oleh orang kompeten.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -30,18 +15,16 @@
 #include <math.h>
 #include "ClimatePolicy.h"
 
-// ISI DI SALINAN LOKAL, jangan commit password/secret. Rotasi secret terbagikan.
 #define WIFI_SSID "GANTI_WIFI_SSID"
 #define WIFI_PASSWORD "GANTI_WIFI_PASSWORD"
 #define DATABASE_URL "https://smartcow-de25f-default-rtdb.asia-southeast1.firebasedatabase.app"
 #define DATABASE_SECRET "GANTI_DATABASE_SECRET"
 #define DEVICE_ID "cow-sprinkler-01"
-constexpr uint8_t ESPNOW_CHANNEL = 6; // sama dengan kiri + kanal tetap router 2.4GHz
-// Opsional: MAC STA kiri. Nol = belajar pengirim valid pertama sampai reboot.
+constexpr uint8_t ESPNOW_CHANNEL = 6;
 const uint8_t LEFT_MAC[6] = {0, 0, 0, 0, 0, 0};
-const uint8_t SENSOR_PINS[3] = {4, 14, 18}; // S1, S2, S3
+const uint8_t SENSOR_PINS[3] = {4, 14, 18};
 const uint8_t DHT_PINS[2] = {19, 25};
-constexpr uint8_t HUMIDITY_LABEL_BASE = 1; // DHT1, DHT2
+constexpr uint8_t HUMIDITY_LABEL_BASE = 1;
 constexpr uint8_t SSR_PIN = 23;
 constexpr bool SSR_ACTIVE_HIGH = true;
 constexpr uint32_t LEFT_TIMEOUT_MS = 10000;
@@ -59,7 +42,6 @@ constexpr uint8_t MAX_SLOTS = 6;
 const char FW_VERSION[] = "3.1.1-final-thi-mac-check";
 constexpr uint8_t CONTROL_POLICY_VERSION = 2;
 
-// Format HARUS identik dengan espkiri_FINAL.
 constexpr uint32_t PACKET_MAGIC = 0x53435732;
 constexpr uint8_t PACKET_VERSION = 3;
 constexpr uint8_t PACKET_SAMPLE = 1;
@@ -119,7 +101,6 @@ struct RelayEvent {
   uint32_t capturedAt;
 };
 
-// Prototipe eksplisit untuk tipe custom dan callback core 2.x / 3.x.
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
 void onReceive(const esp_now_recv_info_t *info, const uint8_t *data, int length);
 #else
@@ -153,7 +134,7 @@ bool leftPaired = false, relayOn = false;
 uint32_t sprayStart = 0, lastSprayEnd = 0, lastPrint = 0;
 ControlConfig control;
 QueueHandle_t receiveQueue, controlQueue, snapshotQueue, eventQueue;
-WiFiClientSecure tls; // HTTP/TLS hanya dimiliki firebaseTask
+WiFiClientSecure tls;
 HTTPClient http;
 
 ControlConfig defaultControl() {
@@ -188,7 +169,7 @@ void beginHumidity() {
     dht[i].humidity = dht[i].temperature = NAN;
     Serial.printf("DHT%d DATA GPIO%u\n", i + HUMIDITY_LABEL_BASE, DHT_PINS[i]);
   }
-  lastHumidityRead = millis(); // tunggu power-up 3 detik sebelum baca pertama
+  lastHumidityRead = millis();
 }
 
 void serviceHumidity() {
@@ -196,7 +177,7 @@ void serviceHumidity() {
   lastHumidityRead = millis();
   for (int i = 0; i < 2; i++) {
     float rh = dhtSensors[i].readHumidity();
-    float t = dhtSensors[i].readTemperature(); // library cache: frame yang sama
+    float t = dhtSensors[i].readTemperature();
     dht[i].valid = usableHumidity(rh) && isfinite(t) && t >= -40 && t <= 80;
     if (dht[i].valid) {
       dht[i].humidity = rh;
@@ -250,7 +231,7 @@ void serviceRadio() {
     memcpy(peer.peer_addr, received.mac, 6);
     peer.channel = 0;
     peer.ifidx = WIFI_IF_STA;
-    peer.encrypt = false; // allowlist MAC bukan autentikasi kriptografis
+    peer.encrypt = false;
     if (esp_now_add_peer(&peer) != ESP_OK) return;
     memcpy(pairedLeft, received.mac, 6);
     leftPaired = true;
@@ -277,7 +258,6 @@ void serviceRadio() {
     leftSequence = packet.sequence;
     haveLeft = true;
   }
-  // Balas duplikat, tetapi jangan memperbarui timestamp/freshness-nya.
   WirePacket ack = {};
   ack.magic = PACKET_MAGIC;
   ack.version = PACKET_VERSION;
@@ -339,7 +319,7 @@ void buildSnapshot(Snapshot &out) {
     if (out.validMask & (1U << i)) { sum += out.temperature[i]; out.validCount++; }
   }
   out.avg = out.validCount ? sum / out.validCount : NAN;
-  out.complete = out.validMask == 63; // hanya 6 DS; tidak tergantung RH
+  out.complete = out.validMask == 63;
   sum = 0;
   for (int i = 0; i < 4; i++) {
     bool valid;
@@ -491,8 +471,6 @@ void fillHumidity(JsonDocument &doc, const Snapshot &state) {
   for (int i = 0; i < 4; i++) {
     char key[4];
     snprintf(key, sizeof(key), "h%d", i + 1);
-    // Invalid/stale -> null, bukan 0 atau nilai lama yang disamarkan fresh.
-    // Firebase menghapus child bernilai null: lihat humidityValidMask.
     if (state.humidityValidMask & (1U << i)) doc[key] = state.humidity[i];
     else doc[key] = nullptr;
     snprintf(key, sizeof(key), "d%d", i + 1);
@@ -503,7 +481,7 @@ void fillHumidity(JsonDocument &doc, const Snapshot &state) {
   }
   if (state.humidityValidCount) doc["humidityAvg"] = state.humidityAvg;
   else doc["humidityAvg"] = nullptr;
-  doc["humidityValidMask"] = state.humidityValidMask; // bit 0..3 = H1..H4
+  doc["humidityValidMask"] = state.humidityValidMask;
   doc["humidityValidCount"] = state.humidityValidCount;
   doc["humidityComplete"] = state.humidityValidMask == 15;
 }
@@ -519,12 +497,12 @@ void fillTelemetry(JsonDocument &doc, const Snapshot &state) {
   for (int i = 0; i < 6; i++) {
     char key[4];
     snprintf(key, sizeof(key), "t%d", i + 1);
-    doc[key] = state.temperature[i]; // angka terakhir / -127; validMask menentukan freshness
+    doc[key] = state.temperature[i];
     if (state.temperatureAgeMs[i] == UINT32_MAX) ages.add(nullptr);
     else ages.add(state.temperatureAgeMs[i]);
   }
   if (state.validCount) doc["avg"] = state.avg;
-  else doc["avg"] = nullptr; // rules FINAL mendukung nol sensor valid tanpa avg palsu
+  else doc["avg"] = nullptr;
   doc["ssr"] = state.relayOn ? 1 : 0;
   doc["sch"] = state.scheduleOn ? 1 : 0;
   doc["n"] = 6;
@@ -535,8 +513,8 @@ void fillTelemetry(JsonDocument &doc, const Snapshot &state) {
   if (state.leftAgeMs == UINT32_MAX) doc["leftAgeMs"] = nullptr;
   else doc["leftAgeMs"] = state.leftAgeMs;
   doc["mode"] = state.mode;
-  doc["autoSrc"] = state.autoSource; // task Firebase tidak membaca control lintas-core
-  doc["measuredTs"] = measuredTimestamp(state.capturedAt); // waktu snapshot; usia RH terpisah
+  doc["autoSrc"] = state.autoSource;
+  doc["measuredTs"] = measuredTimestamp(state.capturedAt);
   doc["ts"][".sv"] = "timestamp";
   fillHumidity(doc, state);
 }
@@ -561,7 +539,7 @@ void sendLog(const Snapshot &state) {
 
 void sendStatus(const Snapshot &state) {
   JsonDocument doc;
-  doc["online"] = true; // bukan bukti selalu online; periksa usia lastSeen
+  doc["online"] = true;
   doc["lastSeen"][".sv"] = "timestamp";
   doc["ip"] = WiFi.localIP().toString();
   doc["fw"] = FW_VERSION;
@@ -666,7 +644,7 @@ void createDefaultControl() {
 }
 
 bool usableStationMac(const uint8_t *mac) {
-  if (mac[0] & 1U) return false; // MAC station harus unicast, bukan broadcast/multicast.
+  if (mac[0] & 1U) return false;
   for (int i = 0; i < 6; i++) if (mac[i] != 0) return true;
   return false;
 }
@@ -696,7 +674,7 @@ void printPairingInfo() {
 }
 
 void firebaseTask(void *) {
-  tls.setInsecure(); // baseline lama; produksi perlu CA untuk verifikasi server
+  tls.setInsecure();
   tls.setHandshakeTimeout(5);
   WiFi.setAutoReconnect(false);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -732,7 +710,7 @@ void firebaseTask(void *) {
     if (!wasConnected) {
       connecting = false;
       Serial.printf("Wi-Fi %s | kanal %d\n", WiFi.localIP().toString().c_str(), WiFi.channel());
-      printPairingInfo(); // Cetak ulang MAC aktual setelah koneksi, bukan hanya saat boot.
+      printPairingInfo();
       if (WiFi.channel() != ESPNOW_CHANNEL)
         Serial.printf("PERINGATAN: router kanal %d, kiri %u. Samakan kanal!\n", WiFi.channel(), ESPNOW_CHANNEL);
       configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
@@ -777,7 +755,7 @@ void setup() {
   Serial.begin(115200);
   digitalWrite(SSR_PIN, SSR_ACTIVE_HIGH ? LOW : HIGH);
   pinMode(SSR_PIN, OUTPUT);
-  delay(250); // Serial siap; relay sudah dipastikan OFF sebelum menunggu.
+  delay(250);
   Serial.printf("SmartCow KANAN | firmware %s | Serial 115200\n", FW_VERSION);
   control = defaultControl();
   lastSprayEnd = millis() - uint32_t(control.cooldown) * 1000UL;

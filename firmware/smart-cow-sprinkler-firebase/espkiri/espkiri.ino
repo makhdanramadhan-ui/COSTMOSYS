@@ -1,7 +1,3 @@
-// SmartCow ESP KIRI: 3 DS18B20 pin sendiri -> ESP-NOW -> ESP kanan.
-// Board: ESP32 Dev Module / WROOM-32. Library: OneWire, DallasTemperature.
-// Salin sketch ini SENDIRI ke folder espkiri/espkiri.ino untuk Arduino IDE.
-// Tiap DATA wajib pull-up fisik 4.7k ke 3V3. Cabut daya saat pindah jack.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -13,19 +9,15 @@
 #include <DallasTemperature.h>
 #include <math.h>
 
-// ISI MAC STA ESP KANAN dari Serial Monitor espkanan, bukan MAC router.
-// Contoh format: {0xAA, 0xBB, 0xCC, 0x11, 0x22, 0x33}.
 const uint8_t RIGHT_MAC[6] = {0, 0, 0, 0, 0, 0};
-// HARUS sama di kanan, kiri, dan kanal tetap router 2.4 GHz.
 constexpr uint8_t ESPNOW_CHANNEL = 6;
-const uint8_t SENSOR_PINS[3] = {4, 14, 18}; // S4, S5, S6 di web
-constexpr uint32_t CONVERSION_MS = 800; // 12-bit: maksimal 750 ms + margin
+const uint8_t SENSOR_PINS[3] = {4, 14, 18};
+constexpr uint32_t CONVERSION_MS = 800;
 constexpr uint32_t SAMPLE_MS = 1000;
 constexpr uint32_t SEND_MS = 2000;
 constexpr uint32_t ACK_WAIT_MS = 300;
-constexpr uint8_t MAX_ATTEMPTS = 4; // 1 kirim + maksimal 3 retry
+constexpr uint8_t MAX_ATTEMPTS = 4;
 
-// Format HARUS identik dengan espkanan. Total 32 byte, bukan raw audio.
 constexpr uint32_t PACKET_MAGIC = 0x53435732;
 constexpr uint8_t PACKET_VERSION = 1;
 constexpr uint8_t PACKET_SAMPLE = 1;
@@ -40,7 +32,7 @@ static_assert(sizeof(WirePacket) == 32, "Format paket harus sama di kedua ESP");
 
 OneWire buses[3] = {SENSOR_PINS[0], SENSOR_PINS[1], SENSOR_PINS[2]};
 DallasTemperature sensors[3] = {&buses[0], &buses[1], &buses[2]};
-float temperature[3] = {-127, -127, -127}; // terakhir terbaca; mask menentukan valid
+float temperature[3] = {-127, -127, -127};
 uint8_t validMask = 0;
 bool converting = false, haveSample = false;
 uint32_t conversionStarted = 0, sampledAt = 0, lastScan = 0;
@@ -50,7 +42,6 @@ bool awaitingAck = false;
 WirePacket pendingPacket = {};
 QueueHandle_t ackQueue = nullptr;
 
-// Prototipe eksplisit supaya preprocessor Arduino mengenali tipe paket.
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
 void onReceive(const esp_now_recv_info_t *info, const uint8_t *data, int length);
 #else
@@ -68,7 +59,6 @@ void receiveAck(const uint8_t *mac, const uint8_t *data, int length) {
   memcpy(&packet, data, sizeof(packet));
   if (packet.magic != PACKET_MAGIC || packet.version != PACKET_VERSION ||
       packet.type != PACKET_ACK) return;
-  // Callback berjalan di task Wi-Fi. Tidak ada Serial/HTTP/delay di sini.
   xQueueOverwrite(ackQueue, &packet);
 }
 
@@ -114,15 +104,13 @@ void serviceSensors() {
     haveSample = true;
     converting = false;
   }
-  now = millis(); // pembacaan bus memakan waktu; hindari unsigned underflow
-  // Scan ulang hanya DI ANTARA konversi, untuk sensor yang dipindah jack.
+  now = millis();
   if (!converting && uint32_t(now - lastScan) >= 60000) scanSensors();
   if (!converting && (!haveSample || uint32_t(now - sampledAt) >= SAMPLE_MS - CONVERSION_MS))
     beginConversion();
 }
 
 void sendAttempt() {
-  // Retry memakai sequence yang sama. Usia sampel selalu diperbarui.
   pendingPacket.sampleAgeMs = millis() - pendingSampledAt;
   esp_err_t result = esp_now_send(RIGHT_MAC,
     reinterpret_cast<const uint8_t *>(&pendingPacket), sizeof(pendingPacket));
@@ -174,7 +162,7 @@ void stopWithError(const char *message) {
 
 void setup() {
   Serial.begin(115200);
-  WiFi.mode(WIFI_STA); // radio aktif; TIDAK login ke router
+  WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   Serial.printf("MAC STA ESP KIRI: %s\n", WiFi.macAddress().c_str());
   bool allZero = true;
@@ -193,7 +181,7 @@ void setup() {
   memcpy(peer.peer_addr, RIGHT_MAC, 6);
   peer.channel = ESPNOW_CHANNEL;
   peer.ifidx = WIFI_IF_STA;
-  peer.encrypt = false; // pilot lokal; bukan autentikasi/enkripsi produksi
+  peer.encrypt = false;
   if (esp_now_add_peer(&peer) != ESP_OK) stopWithError("Gagal memasangkan ESP kanan.");
   bootId = esp_random();
   Serial.printf("ESP-NOW kanal %u; tidak memakai Wi-Fi/Firebase login.\n", ESPNOW_CHANNEL);

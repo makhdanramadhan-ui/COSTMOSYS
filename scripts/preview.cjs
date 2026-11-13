@@ -1,4 +1,3 @@
-// Local-only preview. Serve web assets, never firmware, .git, or local secrets.
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');

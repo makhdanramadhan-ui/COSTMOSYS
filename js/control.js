@@ -1,4 +1,3 @@
-// Dua profil independen; threshold THI tidak pernah disalin ke threshold suhu legacy.
 (function (root, factory) {
   const api = factory(typeof module !== 'undefined' && module.exports ? require('./core.js') : root.SCS);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -58,7 +57,6 @@
       for(let i=0;i<6;i++) for(const [field,key] of [['date','Date'],['start','Start'],['dur','Dur']])
         out[`${prefix}Sch${i+1}${key}`]=p.schedules[i]?.[field] ?? null;
     }
-    // Firmware lama tidak boleh membaca threshold THI 72 sebagai 72 °C.
     const temp=cfg.profiles.temperature;
     for(const k of ['threshold','hysteresis','maxDuration','cooldown','autoSrc']) out[k]=temp[k];
     out.schN=temp.schedules.length; out.schOn=temp.autoSrc==='schedule' && temp.schedules.length ? 1 : 0;

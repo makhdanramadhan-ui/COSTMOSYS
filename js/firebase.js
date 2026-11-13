@@ -1,4 +1,3 @@
-// Public SDK only. Database Rules enforce every permission independently of this UI.
 import {initializeApp,getApps,deleteApp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import {getDatabase,ref,onValue,update,set,remove,push,query,orderByChild,limitToLast,serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js';
 import {getAuth,signInWithEmailAndPassword,onAuthStateChanged,signOut,initializeAuth,inMemoryPersistence,createUserWithEmailAndPassword,deleteUser} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
@@ -38,7 +37,6 @@ async function connect(handlers){
   onAuthStateChanged(auth,user=>{
     const session=++generation;stopSession();callbacks.onAccess?.(null);
     if(!user){callbacks.onAuth?.(false,'');callbacks.onTelemetry?.(null);return;}
-    // Do not reveal private content while access is still being restored.
     let resolved=false,previous='';
     accessUnsub=onValue(ref(db,`access/${user.uid}`),snap=>{
       if(session!==generation)return;
@@ -77,7 +75,6 @@ async function saveUser(uid,record){
 async function createUser(record,password){
   need('admin');
   const data=window.SCSAccess.accountRecord(record,serverTimestamp());
-  // An isolated, nonpersistent Auth instance never replaces the Admin session.
   const app=initializeApp(window.FIREBASE_CONFIG,`create-user-${crypto.randomUUID()}`);
   const secondary=initializeAuth(app,{persistence:inMemoryPersistence});
   let created;
@@ -93,15 +90,13 @@ async function createUser(record,password){
     }
     throw error;
   }finally{
-    // Cleanup must not turn a successfully provisioned account into a reported failure.
     try{await signOut(secondary);}catch{}
     try{await deleteApp(app);}catch{}
   }
 }
-// Removes application access only. Auth identity deletion requires an operator/backend.
 async function removeUserAccess(uid){
   need('admin');if(uid===auth.currentUser.uid)throw new Error('Akun sendiri tidak dapat dihapus.');
-  return remove(ref(db,`access/${uid}`)); // Rules reject every existing Admin target.
+  return remove(ref(db,`access/${uid}`));
 }
 window.SCSFirebase={connect,login,logout:()=>signOut(auth),pushControl,pushOverride,pushEvent,subscribeUsers,saveUser,createUser,removeUserAccess,
   now:()=>Date.now()+timeOffset};

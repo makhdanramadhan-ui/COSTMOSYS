@@ -1,10 +1,3 @@
-// Smart Cow Sprinkler — Firmware ESP32 + Firebase RTDB (REST), versi PlatformIO.
-// Sumber utama firmware. Secret WiFi/Firebase ada di include/secrets.h
-// (tidak di-commit). 6x DS18B20 satu bus OneWire GPIO4, SSR GPIO23.
-//
-// WIRING: semua DQ gabung ke GPIO4, pull-up 4.7kOhm DQ ke 3V3, power 3V3
-// eksternal (bukan parasite). SSR IN ke GPIO23 (+ GND). AC 220V via steker
-// mitra, HATI-HATI tegangan tinggi.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -49,20 +42,17 @@ HTTPClient http;
 
 float curT[6] = {29, 29, 29, 29, 29, 29};
 float lastValid[6] = {29, 29, 29, 29, 29, 29};
-bool fresh[6] = {true, true, true, true, true, true}; // false = fallback, sensor tidak terbaca
+bool fresh[6] = {true, true, true, true, true, true};
 int devCount = 0;
 
 char ctlMode[8] = "auto";
 char ctlManual[8] = "off";
-char ctlAutoSrc[10] = "threshold"; // threshold | schedule (eksklusif)
-// Mode jadwal: daftar slot {jam mulai WIB, lama nyala menit}. Maks 6.
-// Durasi = lama nyala slot itu, tanpa cooldown/proteksi.
+char ctlAutoSrc[10] = "threshold";
 #define MAX_SLOTS 6
 int ctlSlotN = 0;
 char ctlSlotDate[MAX_SLOTS][11] = {"", "", "", "", "", ""};
 char ctlSlotStart[MAX_SLOTS][8] = {"09:00", "14:00", "18:00", "", "", ""};
 int ctlSlotDur[MAX_SLOTS] = {10, 10, 10, 0, 0, 0};
-// Legacy 1-jadwal (fallback bila web lama belum kirim schN).
 char ctlSchStart[8] = "12:00";
 int ctlSchDur = 10;
 bool ctlSchOn = false;
@@ -112,7 +102,6 @@ String fbGet(const String &path) {
   return body;
 }
 
-// Parser JSON mini (respons Firebase compact, tanpa spasi).
 float jNum(const String &js, const char *key, float dflt) {
   String k = String("\"") + key + "\":";
   int i = js.indexOf(k);
@@ -155,7 +144,6 @@ void readSensors() {
   }
 }
 
-// Cetak status bus + tiap sensor ke Serial. Tanda * = fallback (tidak terbaca).
 void printSensors(float avg) {
   Serial.printf("Sensor terdeteksi: %d/6 | ", devCount);
   for (int i = 0; i < 6; i++)
@@ -171,16 +159,12 @@ float avgNow() {
   return lastAvg;
 }
 
-// true bila `cur` (menit) di dalam window [start, start+dur). Tahan bungkus tengah malam.
 bool inWindow(int cur, int start, int dur) {
   if (dur <= 0) return false;
   if (start + dur <= 1440) return cur >= start && cur < start + dur;
   return cur >= start || cur < (start + dur) % 1440;
 }
 
-// true bila SALAH SATU slot jadwal sedang berjalan.
-// Slot bertanggal: hanya jalan di tanggalnya (cocok WIB dari NTP).
-// Tanpa ctlSchOn: jumlah slot (ctlSlotN) yang menentukan. Fallback legacy 1-jadwal.
 bool schedActiveNow() {
   struct tm ti;
   if (!getLocalTime(&ti)) return false;
@@ -202,7 +186,6 @@ bool schedActiveNow() {
   return inWindow(cur, h * 60 + m, ctlSchDur);
 }
 
-// "DD-MM HH:MM" slot yang sedang berjalan (untuk log). "" bila tidak ada.
 void activeSlotStart(char *out, size_t n) {
   struct tm ti;
   if (!getLocalTime(&ti)) { out[0] = 0; return; }
@@ -226,7 +209,6 @@ void applyLogic(float avg) {
   if (autoMode) {
     bool isSchedule = strcmp(ctlAutoSrc, "schedule") == 0;
     if (isSchedule) {
-      // EKSKLUSIF jadwal: ikuti slot persis apa adanya (tanpa cooldown/proteksi).
       bool sch = schedActiveNow();
       if (sch && !ssrOn) {
         char sb[16]; activeSlotStart(sb, sizeof(sb));
@@ -236,7 +218,6 @@ void applyLogic(float avg) {
       }
       schedWas = sch;
     } else {
-      // EKSKLUSIF threshold: abaikan jadwal.
       if (!ssrOn && avg >= ctlThreshold) {
         if ((now - lastSprayEnd) / 1000UL >= (unsigned long)ctlCooldown)
           setRelay(true, "auto_on", "avg>=threshold", avg);
@@ -283,7 +264,7 @@ void sendLog(float avg) {
 void pollControl() {
   String js = fbGet("control");
   if (js.length() == 0) return;
-  if (js == "null") { // belum ada, tulis default dari firmware
+  if (js == "null") {
     char buf[400];
     snprintf(buf, sizeof(buf),
       "{\"mode\":\"auto\",\"autoSrc\":\"threshold\",\"manualSsr\":\"off\",\"threshold\":%.1f,\"hysteresis\":%.1f,"
@@ -304,10 +285,8 @@ void pollControl() {
   ctlSchOn = jNum(js, "schOn", ctlSchOn ? 1 : 0) > 0.5;
   jStr(js, "schStart", ctlSchStart, sizeof(ctlSchStart), "12:00");
   ctlSchDur = (int)jNum(js, "schDur", ctlSchDur);
-  // Migrasi: kalau web lama belum kirim autoSrc, turunkan dari schOn.
   if (strlen(ctlAutoSrc) == 0) strncpy(ctlAutoSrc, ctlSchOn ? "schedule" : "threshold", sizeof(ctlAutoSrc));
   ctlAutoSrc[sizeof(ctlAutoSrc) - 1] = 0;
-  // Daftar slot multi-jadwal bertanggal (schN, sch1Date/sch1Start/sch1Dur, ...). -1 = kunci tak ada.
   {
     int n = (int)jNum(js, "schN", -1);
     if (n >= 0) {
@@ -355,10 +334,10 @@ void setup() {
     if (millis() - t0 > 30000) { Serial.println(" gagal, restart."); ESP.restart(); }
   }
   Serial.printf("\nWiFi OK: %s\n", WiFi.localIP().toString().c_str());
-  configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov"); // WIB untuk jadwal
-  tls.setInsecure(); // demo: tanpa verifikasi sertifikat (jangan untuk produksi)
+  configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  tls.setInsecure();
   pollControl();
-  lastSprayEnd = millis() - (unsigned long)ctlCooldown * 1000UL; // boot tidak kena cooldown
+  lastSprayEnd = millis() - (unsigned long)ctlCooldown * 1000UL;
   tTele = tCtl = tLog = millis();
 }
 
@@ -366,11 +345,11 @@ void loop() {
   unsigned long now = millis();
   readSensors();
   float avg = avgNow();
-  applyLogic(avg); // relay jalan walau Firebase sedang gagal
+  applyLogic(avg);
   if (now - tTele >= TELEMETRY_MS) { tTele = now; sendTelemetry(avg); }
   if (now - tCtl >= CONTROL_MS) { tCtl = now; pollControl(); }
   if (now - tLog >= LOG_MS) { tLog = now; sendLog(avg); }
-  if (now - tScan >= 60000) { // scan ulang bus tiap 1 menit, sensor goyang ikut ketemu lagi
+  if (now - tScan >= 60000) {
     tScan = now;
     dallas.begin();
     int n = dallas.getDeviceCount();

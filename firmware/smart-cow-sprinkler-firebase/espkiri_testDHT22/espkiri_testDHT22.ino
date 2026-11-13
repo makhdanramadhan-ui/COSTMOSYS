@@ -1,18 +1,3 @@
-// SmartCow TEST DHT22 — ESP KIRI (2 sensor, Serial saja).
-// Board: ESP32 Dev Module / WROOM-32.
-// Library Arduino IDE: "DHT sensor library" (Adafruit) + "Adafruit Unified Sensor".
-// File ini dibuka sebagai: espkiri_testDHT22/espkiri_testDHT22.ino
-// (nama folder HARUS sama dengan nama file untuk Arduino IDE).
-// TIDAK ada Wi-Fi / Firebase / ESP-NOW di sketch ini. Murni tes baca sensor.
-//
-// WIRING ESP KIRI:
-//   DHT#3: VCC -> 3V3, GND -> GND, DATA -> GPIO4
-//   DHT#4: VCC -> 3V3, GND -> GND, DATA -> GPIO14
-// Modul DHT22 umumnya sudah ada pull-up di DATA. Kalau pakai sensor
-// telanjang (4 kaki), tambah resistor 10k antara DATA dan VCC.
-// Kabel tes dibuat PENDEK dulu (< 5 m). DHT22 tidak cocok untuk kabel
-// panjang lintas kandang seperti DS18B20.
-// Total 4 titik: kanan = DHT#1 + DHT#2, kiri = DHT#3 + DHT#4.
 
 #include <Arduino.h>
 #include <DHT.h>
@@ -20,15 +5,14 @@
 
 #define DHTTYPE DHT22
 
-const uint8_t DHT_PINS[2] = {4, 14}; // DHT#3, DHT#4 (GPIO boleh sama karena board beda)
-constexpr uint32_t READ_MS = 3000;   // DHT22 minimal ~2 detik antar baca
+const uint8_t DHT_PINS[2] = {4, 14};
+constexpr uint32_t READ_MS = 3000;
 
 DHT dhtSensors[2] = {DHT(DHT_PINS[0], DHTTYPE), DHT(DHT_PINS[1], DHTTYPE)};
 uint32_t lastRead = 0;
 
 float calcTHI(float tempC, float rh) {
   if (!isfinite(tempC) || !isfinite(rh)) return NAN;
-  // Rumus NRC untuk preview saja, bukan kontrol relay.
   return (1.8f * tempC + 32.0f) - (0.55f - 0.0055f * rh) * (1.8f * tempC - 26.0f);
 }
 
@@ -41,7 +25,7 @@ void setup() {
     Serial.printf("DHT#%d DATA -> GPIO%u\n", i + 3, DHT_PINS[i]);
   }
   Serial.println("Buka Serial Monitor 115200. Pembacaan tiap 3 detik.");
-  lastRead = millis() - READ_MS; // baca langsung saat boot
+  lastRead = millis() - READ_MS;
 }
 
 void loop() {

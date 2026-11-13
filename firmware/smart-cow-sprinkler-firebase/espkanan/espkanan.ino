@@ -1,9 +1,3 @@
-// SmartCow ESP KANAN: 3 DS18B20 lokal + 3 dari kiri -> SSR + Firebase.
-// Board: ESP32 Dev Module / WROOM-32. Library: OneWire, DallasTemperature,
-// ArduinoJson (Benoit Blanchon, versi 7). Tidak perlu library Firebase.
-// Salin sketch ini SENDIRI ke folder espkanan/espkanan.ino untuk Arduino IDE.
-// Tiap DATA pull-up fisik 4.7k ke 3V3. SSR IN GPIO23 + GND.
-// Cabut daya saat pindah jack. Pengerjaan AC 220V oleh orang kompeten.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -18,19 +12,14 @@
 #include <time.h>
 #include <math.h>
 
-// ---------------- ISI KONFIGURASI SEBELUM UPLOAD ----------------
-// Jangan commit password/secret asli. Gunakan salinan sketch lokal.
 #define WIFI_SSID "GANTI_WIFI_SSID"
 #define WIFI_PASSWORD "GANTI_WIFI_PASSWORD"
 #define DATABASE_URL "https://smartcow-de25f-default-rtdb.asia-southeast1.firebasedatabase.app"
 #define DATABASE_SECRET "GANTI_DATABASE_SECRET"
 #define DEVICE_ID "cow-sprinkler-01"
-// HARUS sama dengan kiri dan kanal tetap router 2.4 GHz.
 constexpr uint8_t ESPNOW_CHANNEL = 6;
-// Opsional: isi MAC STA kiri untuk membatasi pengirim. Nol = belajar pengirim
-// pertama yang paketnya valid, lalu kunci MAC itu sampai kanan reboot.
 const uint8_t LEFT_MAC[6] = {0, 0, 0, 0, 0, 0};
-const uint8_t SENSOR_PINS[3] = {4, 14, 18}; // S1, S2, S3 di web
+const uint8_t SENSOR_PINS[3] = {4, 14, 18};
 constexpr uint8_t SSR_PIN = 23;
 constexpr bool SSR_ACTIVE_HIGH = true;
 constexpr uint32_t LEFT_TIMEOUT_MS = 10000;
@@ -44,9 +33,7 @@ constexpr uint32_t WIFI_RETRY_MS = 30000;
 constexpr uint32_t WIFI_CONNECT_WINDOW_MS = 10000;
 constexpr uint8_t MAX_SLOTS = 6;
 const char FW_VERSION[] = "2.0.0-dual-esp-kanan";
-// ----------------------------------------------------------------
 
-// Format HARUS identik dengan espkiri.
 constexpr uint32_t PACKET_MAGIC = 0x53435732;
 constexpr uint8_t PACKET_VERSION = 1;
 constexpr uint8_t PACKET_SAMPLE = 1;
@@ -90,7 +77,6 @@ struct RelayEvent {
   uint32_t capturedAt;
 };
 
-// Prototipe eksplisit untuk tipe custom (preprocessor Arduino IDE).
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
 void onReceive(const esp_now_recv_info_t *info, const uint8_t *data, int length);
 #else
@@ -118,7 +104,6 @@ bool relayOn = false;
 uint32_t sprayStart = 0, lastSprayEnd = 0, lastPrint = 0;
 ControlConfig control;
 QueueHandle_t receiveQueue, controlQueue, snapshotQueue, eventQueue;
-// HTTP/TLS hanya dimiliki firebaseTask, bukan loop kontrol/ESP-NOW.
 WiFiClientSecure tls;
 HTTPClient http;
 
@@ -148,7 +133,6 @@ void receiveSample(const uint8_t *mac, const uint8_t *data, int length) {
   received.receivedAt = millis();
   if (received.packet.magic != PACKET_MAGIC ||
       received.packet.version != PACKET_VERSION || received.packet.type != PACKET_SAMPLE) return;
-  // Callback Wi-Fi hanya menyalin ke queue. Tidak menjalankan kontrol/HTTP.
   xQueueOverwrite(receiveQueue, &received);
 }
 
@@ -176,7 +160,7 @@ void serviceRadio() {
   if (!leftPaired) {
     esp_now_peer_info_t peer = {};
     memcpy(peer.peer_addr, received.mac, 6);
-    peer.channel = 0; // kanal radio saat ini, mengikuti router ketika terhubung
+    peer.channel = 0;
     peer.ifidx = WIFI_IF_STA;
     peer.encrypt = false;
     if (esp_now_add_peer(&peer) != ESP_OK) return;
@@ -185,7 +169,6 @@ void serviceRadio() {
     Serial.printf("ESP kiri dipasangkan: %02X:%02X:%02X:%02X:%02X:%02X\n",
       pairedLeft[0], pairedLeft[1], pairedLeft[2], pairedLeft[3], pairedLeft[4], pairedLeft[5]);
   }
-  // Paket duplikat tetap dibalas, tetapi TIDAK memperbarui umur data.
   bool newer = !haveLeft || packet.bootId != leftBootId ||
                int32_t(packet.sequence - leftSequence) > 0;
   if (newer) {
@@ -239,7 +222,7 @@ void serviceSensors() {
     haveLocal = true;
     converting = false;
   }
-  now = millis(); // pembacaan bus memakan waktu; hindari unsigned underflow
+  now = millis();
   if (!converting && uint32_t(now - lastScan) >= 60000) scanSensors();
   if (!converting && (!haveLocal || uint32_t(now - sampledAt) >= SAMPLE_MS - CONVERSION_MS))
     beginConversion();
@@ -301,7 +284,7 @@ bool inWindow(int current, int start, int duration) {
 
 bool schedActiveNow() {
   time_t now = time(nullptr);
-  if (now < 1700000000) return false; // belum sinkron NTP: jangan menjalankan jadwal
+  if (now < 1700000000) return false;
   struct tm local;
   localtime_r(&now, &local);
   int current = local.tm_hour * 60 + local.tm_min;
@@ -323,7 +306,6 @@ bool schedActiveNow() {
 
 void applyLogic(float avg, bool complete, bool scheduleOn) {
   uint32_t now = millis();
-  // Manual/jadwal mempertahankan perilaku firmware lama, tidak memakai suhu.
   if (strcmp(control.mode, "manual") == 0) {
     bool on = strcmp(control.manual, "on") == 0;
     setRelay(on, on ? "manual_on" : "manual_off", "perintah web", avg);
@@ -334,7 +316,6 @@ void applyLogic(float avg, bool complete, bool scheduleOn) {
              scheduleOn ? "slot jadwal aktif" : "jadwal selesai / waktu belum valid", avg);
     return;
   }
-  // Default konservatif: threshold hanya aktif jika keenam sensor fresh.
   if (!complete || !isfinite(avg)) {
     setRelay(false, "sensor_off", "data 6 sensor belum lengkap / kedaluwarsa", avg);
     return;
@@ -381,7 +362,6 @@ String fbGet(const char *path) {
   return body;
 }
 
-// Waktu sampel/kejadian, bukan waktu upload setelah request tertunda.
 int64_t measuredTimestamp(uint32_t capturedAt) {
   time_t now = time(nullptr);
   return now < 1700000000 ? 0 : int64_t(now) * 1000 - uint32_t(millis() - capturedAt);
@@ -391,16 +371,14 @@ void fillTelemetry(JsonDocument &doc, const Snapshot &state) {
   for (int i = 0; i < 6; i++) {
     char key[4];
     snprintf(key, sizeof(key), "t%d", i + 1);
-    // Kompatibilitas rules lama: angka terakhir; validMask adalah sumber freshness.
-    // -127 = belum pernah ada nilai valid, BUKAN suhu untuk perhitungan.
     doc[key] = state.temperature[i];
   }
-  doc["avg"] = state.avg; // hanya rata-rata sensor valid/fresh, tidak memakai fallback
+  doc["avg"] = state.avg;
   doc["ssr"] = state.relayOn ? 1 : 0;
   doc["sch"] = state.scheduleOn ? 1 : 0;
-  doc["n"] = 6; // enam posisi tetap, bukan jumlah sensor valid
+  doc["n"] = 6;
   doc["validCount"] = state.validCount;
-  doc["validMask"] = state.validMask; // bit 0..5 = S1..S6
+  doc["validMask"] = state.validMask;
   doc["complete"] = state.complete;
   doc["leftOnline"] = state.leftOnline;
   if (state.leftAgeMs == UINT32_MAX) doc["leftAgeMs"] = nullptr;
@@ -411,7 +389,6 @@ void fillTelemetry(JsonDocument &doc, const Snapshot &state) {
 }
 
 void sendTelemetry(const Snapshot &state) {
-  // Rules existing mewajibkan avg numerik. Jangan mengarang avg jika 0 valid.
   if (!state.validCount) return;
   JsonDocument doc;
   fillTelemetry(doc, state);
@@ -433,7 +410,7 @@ void sendLog(const Snapshot &state) {
 
 void sendStatus(const Snapshot &state) {
   JsonDocument doc;
-  doc["online"] = true; // kanan berhasil upload; web harus tetap memeriksa lastSeen
+  doc["online"] = true;
   doc["lastSeen"][".sv"] = "timestamp";
   doc["ip"] = WiFi.localIP().toString();
   doc["fw"] = FW_VERSION;
@@ -500,7 +477,6 @@ bool parseControl(const String &body, ControlConfig &out) {
 }
 
 void createDefaultControl() {
-  // Kompatibel dengan control web lama; hanya dipanggil jika control belum ada.
   JsonDocument doc;
   doc["mode"] = "auto";
   doc["autoSrc"] = "threshold";
@@ -518,8 +494,7 @@ void createDefaultControl() {
 }
 
 void firebaseTask(void *) {
-  // Menjaga HTTP/TLS yang blocking tidak menahan pembacaan dan proteksi relay.
-  tls.setInsecure(); // sama seperti firmware lama; untuk produksi pakai CA valid
+  tls.setInsecure();
   tls.setHandshakeTimeout(5);
   WiFi.setAutoReconnect(false);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -532,13 +507,12 @@ void firebaseTask(void *) {
     if (!connected) {
       if (wasConnected) {
         Serial.println("Wi-Fi putus; kontrol lokal tetap jalan.");
-        WiFi.disconnect(false, false); // radio tetap aktif untuk ESP-NOW
+        WiFi.disconnect(false, false);
         esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
         connecting = false;
         lastWifi = now;
       }
       wasConnected = false;
-      // Jangan terus scan Wi-Fi: kembalikan radio ke kanal ESP-NOW saat idle.
       if (connecting && uint32_t(now - lastWifi) >= WIFI_CONNECT_WINDOW_MS) {
         WiFi.disconnect(false, false);
         esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
@@ -547,7 +521,6 @@ void firebaseTask(void *) {
       if (!connecting && uint32_t(now - lastWifi) >= WIFI_RETRY_MS) {
         lastWifi = now;
         Serial.println("Mencoba Wi-Fi lagi (tanpa restart ESP).");
-        // Kanal sudah diketahui; hindari scan seluruh kanal saat reconnect.
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD, ESPNOW_CHANNEL);
         connecting = true;
       }
@@ -585,7 +558,6 @@ void firebaseTask(void *) {
     if (uint32_t(millis() - lastLog) >= LOG_MS && xQueuePeek(snapshotQueue, &state, 0) == pdTRUE) {
       lastLog = millis();
       sendLog(state);
-      // Ambil ulang karena request log mungkin lama.
       if (xQueuePeek(snapshotQueue, &state, 0) == pdTRUE) sendStatus(state);
     }
     if (!pendingEvent) pendingEvent = xQueueReceive(eventQueue, &event, 0) == pdTRUE;
@@ -622,7 +594,6 @@ void setup() {
   esp_now_register_recv_cb(onReceive);
   scanSensors();
   beginConversion();
-  // ESP32 klasik dual-core: HTTP di core 0, loop kontrol Arduino di core 1.
   if (xTaskCreatePinnedToCore(firebaseTask, "firebase", 12288, nullptr, 1, nullptr, 0) != pdPASS)
     stopWithError("Gagal memulai task Firebase.");
 }
