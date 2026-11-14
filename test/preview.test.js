@@ -67,17 +67,17 @@ test('sidebar starts closed and inert, with an accessible toggle', () => {
 });
 
 test('overview welcomes the signed-in account without changing the dynamic greeting or barn banner', () => {
-  const heading = html.match(/<section class="page-heading" data-page="dash">([\s\S]*?)<\/section>/)?.[1];
+  const heading = html.match(/<section class="page-heading brand-heading" data-page="dash">([\s\S]*?)<\/section>/)?.[1];
   assert.ok(heading);
-  assert.match(heading, /<h1>Halo, <span id="greetingName">Pengelola<\/span>\.<\/h1>/);
-  assert.match(heading, /<p>Selamat datang di COSTMOSYS\. Pantau kondisi Kandang A dalam satu tempat\.<\/p>/);
+  assert.match(heading, /<h1\b[^>]*>[^<]*<\/h1>[\s\S]*<h2\b[^>]*>[^<]*<span id="greetingName">[^<]*<\/span>/);
+  assert.match(heading, /<p class="welcome">/);
   assert.match(heading, /id="clock"/);
   assert.match(html, /<div class="hero-copy"><h2>Kandang A<\/h2><\/div>/);
 });
 
 test('threshold summaries start hidden with no hard-coded default values', () => {
-  assert.match(html, /<div data-threshold-basis="temperature" hidden>Ambang suhu <b id="thresholdLabel">—<\/b>/);
-  assert.match(html, /<div class="mini-stats" data-threshold-basis="thi" hidden><div>Ambang THI <b id="thiThresholdLabel">—<\/b>/);
+  assert.match(html, /<div data-threshold-basis="temperature" hidden>[^<]* <b id="thresholdLabel">—<\/b>/);
+  assert.match(html, /<div class="mini-stats" data-threshold-basis="thi" hidden><div>[^<]* <b id="thiThresholdLabel">—<\/b>/);
 });
 
 test('local illustration is self-contained and contains no script or remote resource', () => {

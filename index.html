@@ -10,7 +10,7 @@
   <script>
   try { document.documentElement.dataset.theme = localStorage.getItem('scs_theme') === 'dark' ? 'dark' : 'light'; } catch {}
   </script>
-  <link rel="stylesheet" href="css/style.css?v=50" />
+  <link rel="stylesheet" href="css/style.css?v=51" />
 </head>
 <body>
 <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -40,11 +40,11 @@
 </svg>
 
 <div id="sessionPanel" class="session-panel" role="status" aria-live="polite" aria-busy="true">
-  <div class="session-card"><span class="session-brand"><svg class="icon"><use href="#i-barn"/></svg> costmosys<span>.</span></span><span class="session-loader" aria-hidden="true"></span><h1>Menyiapkan ruang kendali</h1><p id="sessionMessage">Memulihkan sesi dengan aman…</p><a id="sessionRetry" class="btn" href="./" hidden>Coba muat ulang</a></div>
+  <div class="session-card"><span class="session-brand"><svg class="icon"><use href="#i-barn"/></svg> costmosys</span><span class="session-loader" aria-hidden="true"></span><h1>Menyiapkan ruang kendali</h1><p id="sessionMessage">Memulihkan sesi dengan aman…</p><a id="sessionRetry" class="btn" href="./" hidden>Coba muat ulang</a></div>
 </div>
 <main id="authPanel" class="auth-page" aria-labelledby="loginTitle" hidden inert>
   <section class="auth-story" aria-label="Tentang COSTMOSYS">
-    <a class="wordmark auth-brand" href="./" aria-label="COSTMOSYS, Cow Stress Monitoring System, halaman masuk"><span class="brand-mark"><svg class="icon"><use href="#i-barn"/></svg></span><span class="brand-text"><span class="brand-name">costmosys<span class="brand-period">.</span></span><span class="brand-full">Cow Stress Monitoring System</span></span></a>
+    <a class="wordmark auth-brand" href="./" aria-label="COSTMOSYS, Cow Stress Monitoring System, halaman masuk"><span class="brand-mark"><svg class="icon"><use href="#i-barn"/></svg></span><span class="brand-text"><span class="brand-name">costmosys</span><span class="brand-full">Cow Stress Monitoring System</span></span></a>
     <div class="auth-story-copy">
       <h1>Pantau kandang.<br/><em>Atur sprinkler.</em></h1>
       <p>Pantau suhu, kelembapan, dan THI lingkungan kandang. Kelola sprinkler sesuai izin akun Anda.</p>
@@ -80,7 +80,7 @@
   <a class="skip-link" href="#mainContent">Lewati ke konten</a>
   <div id="sideOverlay" class="side-overlay" hidden></div>
   <aside id="sidebar" class="sidebar" aria-label="Navigasi utama" aria-hidden="true" inert>
-    <div class="side-head"><a class="wordmark" href="./" aria-label="COSTMOSYS, Cow Stress Monitoring System"><span class="brand-mark"><svg class="icon"><use href="#i-barn"/></svg></span><span class="brand-text"><span class="brand-name">costmosys<span class="brand-period">.</span></span><span class="brand-full">Cow Stress Monitoring System</span></span></a><button id="sideClose" class="icon-button" aria-label="Tutup menu"><svg class="icon"><use href="#i-close"/></svg></button></div>
+    <div class="side-head"><a class="wordmark" href="./" aria-label="COSTMOSYS, Cow Stress Monitoring System"><span class="brand-mark"><svg class="icon"><use href="#i-barn"/></svg></span><span class="brand-text"><span class="brand-name">costmosys</span><span class="brand-full">Cow Stress Monitoring System</span></span></a><button id="sideClose" class="icon-button" aria-label="Tutup menu"><svg class="icon"><use href="#i-close"/></svg></button></div>
     <div class="nav-label">RUANG KENDALI</div>
     <nav class="side-nav">
       <button class="side-link active" data-page="dash"><svg class="icon"><use href="#i-grid"/></svg> Overview <span class="nav-indicator"></span></button>
@@ -103,7 +103,7 @@
     <main id="mainContent" class="container" tabindex="-1">
       <div id="localPreviewNotice" class="local-preview-note" role="note" hidden><svg class="icon"><use href="#i-lock"/></svg><span><b>Preview lokal.</b> Ini server lokal. Tombol kontrol tetap terhubung ke perangkat asli.</span></div>
       <div id="connectionNotice" class="notice" role="status" hidden></div>
-      <section class="page-heading" data-page="dash"><div><h1>Halo, <span id="greetingName">Pengelola</span>.</h1><p>Selamat datang di COSTMOSYS. Pantau kondisi Kandang A dalam satu tempat.</p></div><div class="clock-card"><div><svg class="icon"><use href="#i-history"/></svg><span id="clock" class="clock">--:--:--</span><span class="wib-badge">WIB</span></div><div id="dateLine" class="date-line">Memuat waktu…</div></div></section>
+      <section class="page-heading brand-heading" data-page="dash"><div class="heading-copy"><div class="brand-masthead"><h1 class="brand-title">COSTMOSYS</h1><p class="brand-expansion">Cow Stress Monitoring System</p><p class="brand-slogan">Kenali kondisi kandang. Kendalikan dengan data.</p></div><h2 class="greeting">Halo, <span id="greetingName">Pengelola</span>.</h2><p class="welcome"><span class="welcome-lead">Selamat datang di COSTMOSYS. </span>Pantau <span class="welcome-extra">kondisi </span>Kandang A dalam satu tempat.</p></div><div class="clock-card"><div><svg class="icon"><use href="#i-history"/></svg><span id="clock" class="clock">--:--:--</span><span class="wib-badge">WIB</span></div><div id="dateLine" class="date-line">Memuat waktu…</div></div></section>
       <section id="accessNotice" class="notice" data-page="dash" hidden>Memeriksa izin akun…</section>
 
       <section class="farm-hero" data-page="dash">
@@ -117,9 +117,9 @@
       </section>
 
       <section class="grid summary-grid" data-page="dash" aria-label="Ringkasan iklim kandang">
-        <article class="card metric-card temperature-summary"><div class="metric-heading"><span class="metric-icon warm"><svg class="icon"><use href="#i-temp"/></svg></span><div><div class="card-label">Suhu rata-rata</div><span class="metric-source">6 titik · DS18B20</span></div><span class="metric-code">DS</span></div><div class="avg-value"><span id="avgTemp">—</span><span class="unit">°C</span></div><div id="avgStatus" class="status-pill neutral">MENUNGGU DATA</div><div class="mini-stats"><div>Titik terendah <b id="minTemp">—</b></div><div>Titik tertinggi <b id="maxTemp">—</b></div><div data-threshold-basis="temperature" hidden>Ambang suhu <b id="thresholdLabel">—</b></div></div><p class="snapshot-note">Min/maks antar titik · pembacaan terkini</p><p id="dsSummary" class="hint metric-footnote">0/6 sensor valid</p><button id="btnTemperatureDetails" class="btn sensor-detail-btn" type="button" data-sensors="temperature" aria-haspopup="dialog" aria-controls="sensorDialog">Lihat titik sensor <svg class="icon"><use href="#i-arrow"/></svg></button></article>
+        <article class="card metric-card temperature-summary"><div class="metric-heading"><span class="metric-icon warm"><svg class="icon"><use href="#i-temp"/></svg></span><div><div class="card-label">Suhu rata-rata</div><span class="metric-source">6 titik · DS18B20</span></div><span class="metric-code">DS</span></div><div class="avg-value"><span id="avgTemp">—</span><span class="unit">°C</span></div><div id="avgStatus" class="status-pill neutral">MENUNGGU DATA</div><div class="mini-stats"><div>Titik terendah <b id="minTemp">—</b></div><div>Titik tertinggi <b id="maxTemp">—</b></div><div data-threshold-basis="temperature" hidden>Threshold suhu <b id="thresholdLabel">—</b></div></div><p class="snapshot-note">Min/maks antar titik · pembacaan terkini</p><p id="dsSummary" class="hint metric-footnote">0/6 sensor valid</p><button id="btnTemperatureDetails" class="btn sensor-detail-btn" type="button" data-sensors="temperature" aria-haspopup="dialog" aria-controls="sensorDialog">Lihat titik sensor <svg class="icon"><use href="#i-arrow"/></svg></button></article>
         <article class="card metric-card humidity-summary"><div class="metric-heading"><span class="metric-icon cool"><svg class="icon"><use href="#i-drop"/></svg></span><div><div class="card-label">Kelembapan udara</div><span class="metric-source">4 titik · DHT22</span></div><span class="metric-code">RH</span></div><div class="avg-value"><span id="avgHumidity">—</span><span class="unit">%RH</span></div><div id="humidityStatus" class="status-pill neutral">MENUNGGU DATA</div><div class="mini-stats"><div>Titik terendah <b id="minHumidity">—</b></div><div>Titik tertinggi <b id="maxHumidity">—</b></div></div><p class="snapshot-note">Min/maks antar titik · pembacaan terkini</p><p id="rhSummary" class="hint metric-footnote">0/4 sensor valid · input RH untuk THI</p><button id="btnHumidityDetails" class="btn sensor-detail-btn" type="button" data-sensors="humidity" aria-haspopup="dialog" aria-controls="sensorDialog">Lihat titik kelembapan <svg class="icon"><use href="#i-arrow"/></svg></button></article>
-        <article class="card metric-card thi-summary"><div class="metric-heading"><span class="metric-icon sage"><svg class="icon"><use href="#i-leaf"/></svg></span><div><div class="card-label">Indeks THI kandang</div><span class="metric-source">Agregat suhu &amp; kelembapan</span></div><span class="metric-code">THI</span></div><div class="avg-value"><span id="thiValue">—</span><span class="unit">THI</span></div><div id="thiStatus" class="status-pill neutral">MENUNGGU DATA</div><div class="mini-stats" data-threshold-basis="thi" hidden><div>Ambang THI <b id="thiThresholdLabel">—</b></div></div><p class="thi-method">Dihitung dengan rata-rata suhu dan kelembapan, dengan T sebagai suhu dan RH sebagai kelembapan:<br>THI = (1.8 * T + 32) - (0.55 - 0.0055 * RH) * (1.8 * T - 26).</p><p id="thiSummary" class="hint metric-footnote">Rata-rata 6 DS + RH rata-rata 4 DHT</p></article>
+        <article class="card metric-card thi-summary"><div class="metric-heading"><span class="metric-icon sage"><svg class="icon"><use href="#i-leaf"/></svg></span><div><div class="card-label">Indeks THI kandang</div><span class="metric-source">Agregat suhu &amp; kelembapan</span></div><span class="metric-code">THI</span></div><div class="avg-value"><span id="thiValue">—</span><span class="unit">THI</span></div><div id="thiStatus" class="status-pill neutral">MENUNGGU DATA</div><div class="mini-stats" data-threshold-basis="thi" hidden><div>Threshold THI <b id="thiThresholdLabel">—</b></div></div><p class="thi-method">Dihitung dengan rata-rata suhu dan kelembapan, dengan T sebagai suhu dan RH sebagai kelembapan:<br>THI = (1.8 * T + 32) - (0.55 - 0.0055 * RH) * (1.8 * T - 26).</p><p id="thiSummary" class="hint metric-footnote">Rata-rata 6 DS + RH rata-rata 4 DHT</p></article>
       </section>
 
       <section class="grid insights-grid" data-page="dash" aria-label="Konfigurasi sprinkler dan tren sensor">
@@ -139,12 +139,12 @@
             <section class="control-section" aria-labelledby="sourceTitle">
               <div class="control-step"><h3 id="sourceTitle">Waktu operasi</h3></div>
               <div class="auto-src">
-                <label class="src-card"><input type="radio" name="autoSrc" id="srcThreshold" value="threshold" checked/><div><b>Sepanjang waktu</b><span>Ikuti ambang terpilih</span></div></label>
-                <label class="src-card"><input type="radio" name="autoSrc" id="srcSchedule" value="schedule"/><div><b>Dalam jadwal</b><span>Ambang + jendela waktu</span></div></label>
+                <label class="src-card"><input type="radio" name="autoSrc" id="srcThreshold" value="threshold" checked/><div><b>Sepanjang waktu</b><span>Ikuti threshold terpilih</span></div></label>
+                <label class="src-card"><input type="radio" name="autoSrc" id="srcSchedule" value="schedule"/><div><b>Dalam jadwal</b><span>Threshold + jendela waktu</span></div></label>
               </div>
             </section>
             <section class="control-section protection-section" aria-labelledby="protectionTitle">
-              <div class="control-step"><h3 id="protectionTitle">Ambang &amp; proteksi</h3></div>
+              <div class="control-step"><h3 id="protectionTitle">Threshold &amp; proteksi</h3></div>
               <div class="control-values">
                 <div id="threshGroup">
                   <div class="form-grid"><label><span id="thresholdInputLabel">Threshold semprot suhu (°C)</span><input id="inThreshold" type="number" step="0.1" min="20" max="40" value="30.0"/></label></div>
@@ -161,7 +161,7 @@
         <div class="sched-box" id="schedGroup"><div class="sched-head"><span id="scheduleTitle">Jendela jadwal Suhu (maks 6×)</span><button id="btnAddSched" class="btn small"><svg class="icon"><use href="#i-plus"/></svg> Tambah jadwal</button></div><div id="schedList"></div><div id="schedHint" class="hint"></div></div>
           <div class="control-actions"><p class="hint save-note"><svg class="icon"><use href="#i-lock"/></svg> Pengaturan otomatis mengikuti kelengkapan sensor.</p><button id="btnSaveCfg" class="btn blue full">Simpan pengaturan</button></div>
         </article>
-        <article class="card chart-card"><div class="card-head"><div><h2>Tren sensor</h2><p class="hint">Pengamatan satu jam terakhir · celah berarti data tidak tersedia</p></div><span class="subtle-tag">1 JAM</span></div><div class="chart-toolbar"><select id="chartMetric" aria-label="Jenis grafik"><option value="temperature">Suhu DS (°C)</option><option value="humidity">Kelembapan DHT (%RH)</option><option value="thi">THI agregat</option></select><label class="checkbox-label"><input type="checkbox" id="showAvg" checked/> Rata-rata</label></div><div class="legend" id="legend"></div><canvas id="chart" height="220" role="img" aria-label="Grafik tren sensor satu jam terakhir. Nilai terbaru tersedia di kartu sensor."></canvas><div class="chart-bottom"><span class="hint">Data mengikuti laporan ESP kanan.</span><button id="btnClearChart" class="btn small">Bersihkan grafik</button></div><div class="chart-explainer"><svg class="icon"><use href="#i-signal"/></svg><p>Garis putus-putus hanya tampil pada grafik dasar kontrol yang tersimpan, sesuai ambang pengguna. Pembacaan yang hilang tidak dianggap nol.</p></div></article>
+        <article class="card chart-card"><div class="card-head"><div><h2>Tren sensor</h2><p class="hint">Satu jam terakhir. Celah pada garis berarti data tidak tersedia.</p></div><span class="subtle-tag">1 JAM</span></div><div class="chart-toolbar"><select id="chartMetric" aria-label="Jenis grafik"><option value="temperature">Suhu DS (°C)</option><option value="humidity">Kelembapan DHT (%RH)</option><option value="thi">THI agregat</option></select><label class="checkbox-label"><input type="checkbox" id="showAvg" checked/> Rata-rata</label></div><div class="legend" id="legend"></div><div class="chart-frame"><canvas id="chart" height="220" role="img" aria-label="Grafik tren sensor satu jam terakhir. Nilai terbaru tersedia di kartu sensor."></canvas><div id="chartEmpty" class="chart-empty" role="status"><b>Belum ada data sensor</b><span>Grafik muncul setelah pembacaan diterima.</span></div></div><div class="chart-bottom"><span class="hint">Sumber: laporan ESP kanan.</span><button id="btnClearChart" class="btn small">Bersihkan grafik</button></div><div class="chart-explainer"><svg class="icon"><use href="#i-signal"/></svg><p>Garis putus-putus menandai threshold pada dasar kontrol yang tersimpan. Data yang hilang tidak dianggap nol.</p></div></article>
       </section>
 
       <section class="page-heading" data-page="log"><div><h1>Riwayat sensor<span class="heading-period">.</span></h1><p>Pembacaan suhu, kelembapan, dan THI dari perangkat.</p></div><span class="page-tag"><svg class="icon"><use href="#i-history"/></svg> 120 pembacaan terakhir</span></section>
@@ -183,7 +183,7 @@
             </div>
             <fieldset id="newUserPermissions" class="permission-options"><legend>Izin Kandang A</legend>
               <label class="permission-choice"><input id="newMonitor" type="checkbox" aria-label="Monitoring" checked/><span class="permission-copy"><b>Monitoring</b><span>Suhu, kelembapan, THI &amp; riwayat</span></span></label>
-              <label class="permission-choice"><input id="newSettings" type="checkbox" aria-label="Pengaturan"/><span class="permission-copy"><b>Pengaturan</b><span>Ambang, jadwal &amp; proteksi</span></span></label>
+              <label class="permission-choice"><input id="newSettings" type="checkbox" aria-label="Pengaturan"/><span class="permission-copy"><b>Pengaturan</b><span>Threshold, jadwal &amp; proteksi</span></span></label>
               <label class="permission-choice"><input id="newOperate" type="checkbox" aria-label="Operasi sprinkler"/><span class="permission-copy"><b>Operasi sprinkler</b><span>Mode &amp; kendali manual</span></span></label>
             </fieldset>
             <p id="newRoleHint" class="admin-permission-note">Pengaturan dan Operasi menyertakan Monitoring. Semua izin tidak menjadikan User sebagai Admin.</p>
@@ -197,7 +197,7 @@
       </section>
     </main>
 
-    <footer class="app-footer"><span><svg class="icon"><use href="#i-barn"/></svg> costmosys. <span>Cow Stress Monitoring System</span></span><div class="node-pills"><span id="rightNode" class="node-pill">ESP kanan · menunggu</span><span id="leftNode" class="node-pill">ESP kiri · menunggu</span></div></footer>
+    <footer class="app-footer"><span><svg class="icon"><use href="#i-barn"/></svg> costmosys <span>Cow Stress Monitoring System</span></span><div class="node-pills"><span id="rightNode" class="node-pill">ESP kanan · menunggu</span><span id="leftNode" class="node-pill">ESP kiri · menunggu</span></div></footer>
   </div>
 
   <dialog id="sensorDialog" class="sensor-dialog" aria-labelledby="sensorDialogTitle">
@@ -235,7 +235,7 @@ window.addEventListener('error', function (e) {
 }, true);
 </script>
 <script type="module" src="js/firebase.js?v=44"></script>
-<script src="js/app.js?v=43"></script>
+<script src="js/app.js?v=44"></script>
 <script src="js/admin.js?v=46"></script>
 </body>
 </html>

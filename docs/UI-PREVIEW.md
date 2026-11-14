@@ -34,7 +34,7 @@ Bagian konfigurasi dan tren memiliki lebar konten yang sejajar. Container query 
 
 ## Pengaturan dan administrasi
 
-Ringkasan dan garis threshold pada grafik mengikuti dasar kontrol yang sudah tersimpan. Mengedit draft atau berpindah pilihan sebelum menyimpan tidak mengubah ambang terapan. Pembacaan pada dasar lain tetap tersedia untuk monitoring tanpa perbandingan threshold yang tidak relevan. Jika konfigurasi belum dimuat, ambang tidak ditampilkan seolah sudah diketahui.
+Ringkasan dan garis threshold pada grafik mengikuti dasar kontrol yang sudah tersimpan. Mengedit draft atau berpindah pilihan sebelum menyimpan tidak mengubah threshold terapan. Pembacaan pada dasar lain tetap tersedia untuk monitoring tanpa perbandingan threshold yang tidak relevan. Jika konfigurasi belum dimuat, ambang tidak ditampilkan seolah sudah diketahui.
 
 Dashboard Admin memisahkan form pembuatan akun, kartu akun yang sedang login, dan daftar akun. Kartu User menyediakan tindakan pengaturan izin, aktivasi, dan penghapusan akses setelah konfirmasi. Admin baru memperoleh seluruh izin; Admin yang sudah ada tidak dapat diedit atau dihapus dari dashboard. Penghapusan akses aplikasi tidak sama dengan penghapusan identitas Firebase Auth.
 
@@ -58,6 +58,6 @@ node --test test/core.test.js test/telemetry.test.js test/control.test.js test/p
 node scripts/build-rules.cjs --check
 ```
 
-Tes preview memeriksa gerbang sesi, aset yang tersedia, serta penolakan akses ke firmware dan konfigurasi privat. Tes rendering memeriksa ambang tersimpan versus draft, data hilang, dan garis grafik. Logika THI, kontrol, serta izin memiliki pemeriksaan terpisah. Pengujian Rules dan bridge SDK menggunakan proyek emulator demo sebagaimana dijelaskan dalam panduan Admin dan User.
+Tes preview memeriksa gerbang sesi, aset yang tersedia, serta penolakan akses ke firmware dan konfigurasi privat. Tes rendering memeriksa threshold tersimpan versus draft, data hilang, dan garis grafik. Logika THI, kontrol, serta izin memiliki pemeriksaan terpisah. Pengujian Rules dan bridge SDK menggunakan proyek emulator demo sebagaimana dijelaskan dalam panduan Admin dan User.
 
 Riwayat perubahan antarmuka tersedia melalui commit Git. Hasil tes otomatis tidak membuktikan kinerja perangkat, aksesibilitas formal, atau keselamatan instalasi. Jangan mempublikasikan backup lokal yang dapat memuat konfigurasi atau kredensial privat.

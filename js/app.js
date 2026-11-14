@@ -137,9 +137,9 @@ function renderSensors(){
   if (!SCSTelemetry.finite(avg)){ pill.textContent='DATA BELUM TERSEDIA'; pill.className='status-pill neutral'; }
   else if (!temperatureActive){ pill.textContent=sensorView.complete ? 'MONITORING SUHU' : 'DATA SUHU PARSIAL · MONITORING'; pill.className='status-pill neutral'; }
   else if (!sensorView.complete){ pill.textContent='DATA PARSIAL · AUTO SUHU DIBLOKIR'; pill.className='status-pill waspada'; }
-  else if (avg >= tempProfile.threshold + 1){ pill.textContent='SUHU TINGGI · DI ATAS AMBANG'; pill.className='status-pill bahaya'; }
-  else if (avg >= tempProfile.threshold){ pill.textContent='WASPADA — AMBANG TERSENTUH'; pill.className='status-pill waspada'; }
-  else { pill.textContent='DI BAWAH AMBANG SUHU'; pill.className='status-pill normal'; }
+  else if (avg >= tempProfile.threshold + 1){ pill.textContent='SUHU TINGGI · DI ATAS THRESHOLD'; pill.className='status-pill bahaya'; }
+  else if (avg >= tempProfile.threshold){ pill.textContent='WASPADA — THRESHOLD TERSENTUH'; pill.className='status-pill waspada'; }
+  else { pill.textContent='DI BAWAH THRESHOLD SUHU'; pill.className='status-pill normal'; }
   $('dsSummary').textContent = `${sensorView.validCount}/6 DS valid · rata-rata ${sensorView.complete ? 'lengkap' : 'parsial'}${sensorView.legacy ? ' · firmware lama' : ''}`;
   $('sensorTitle').textContent = `6 titik suhu · ${sensorView.validCount} valid`;
   $('noSensor').style.display = telemetry && !shown.length ? '' : 'none';
@@ -223,7 +223,7 @@ function autoControl(avg){
     $('sprinklerReason').textContent = 'Mode manual · status mengikuti laporan perangkat.';
   } else {
     const value=metricValue(sensorView,appliedCfg), gated=appliedCfg.autoSrc==='schedule';
-    $('sprinklerReason').textContent=`${basisName(appliedCfg)} ${fmtValue(value)}${basisUnit(appliedCfg)} · ambang ${appliedCfg.threshold.toFixed(1)}${basisUnit(appliedCfg)}. ${gated ? 'Hanya beroperasi dalam jadwal. ' : ''}Proteksi otomatis tetap aktif.`;
+    $('sprinklerReason').textContent=`${basisName(appliedCfg)} ${fmtValue(value)}${basisUnit(appliedCfg)} · threshold ${appliedCfg.threshold.toFixed(1)}${basisUnit(appliedCfg)}. ${gated ? 'Hanya beroperasi dalam jadwal. ' : ''}Proteksi otomatis tetap aktif.`;
   }
 }
 
@@ -242,17 +242,16 @@ function drawChart(){
   const c = $('chart'), ctx = c.getContext('2d');
   if (!c.clientWidth) return;
   const T = chartTheme();
-  const W = c.width = c.clientWidth * 2, H = c.height = 440;
+  const dpr = Math.max(1, Math.ceil(window.devicePixelRatio || 1));
+  const W = c.clientWidth, H = c.clientHeight || 250;
+  c.width = W * dpr; c.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0,0,W,H);
-  if (history.length < 2){
-    ctx.strokeStyle=T.grid; ctx.lineWidth=1;
-    for(let i=1;i<=4;i++){ const y=i*70; ctx.beginPath(); ctx.moveTo(24,y); ctx.lineTo(W-24,y); ctx.stroke(); }
-    ctx.textAlign='center'; ctx.fillStyle=T.empty; ctx.font='500 26px Segoe UI, sans-serif';
-    ctx.fillText('Tren dimulai dari pembacaan pertama.', W/2, 195);
-    ctx.font='20px Segoe UI, sans-serif'; ctx.fillText('Menunggu data sensor terkini…', W/2, 235); ctx.textAlign='start'; return;
-  }
   const data = history.filter((d) => Date.now() - d.t < 3600000).slice(-1800);
-  if (data.length < 2) return;
+  const sparse = data.length < 2;
+  $('chartEmpty').hidden = !sparse;
+  ctx.font = '500 12px "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif';
+  if (sparse) return;
   const rh = $('chartMetric').value === 'humidity';
   const thi=$('chartMetric').value==='thi';
   const showThreshold=!rh && isAppliedBasis(thi ? 'thi' : 'temperature');
@@ -266,20 +265,21 @@ function drawChart(){
     if (mx < mn){ mn=thi ? 60 : 20; mx=thi ? 100 : 40; }
     mn-=0.3; mx+=0.3;
   }
-  const X = i => 60 + (data[i].t-data[0].t)/Math.max(1,data[data.length-1].t-data[0].t)*(W-80);
-  const Y = v => 20 + (1-(v-mn)/(mx-mn))*(H-70);
-  ctx.strokeStyle=T.grid; ctx.fillStyle=T.txt; ctx.font='22px sans-serif';
+  const L = 44;
+  const X = i => L + (data[i].t-data[0].t)/Math.max(1,data[data.length-1].t-data[0].t)*(W-L-12);
+  const Y = v => 12 + (1-(v-mn)/(mx-mn))*(H-36);
+  ctx.strokeStyle=T.grid; ctx.fillStyle=T.txt; ctx.lineWidth=1;
   for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4, y=Y(v);
-    ctx.beginPath(); ctx.moveTo(60,y); ctx.lineTo(W-20,y); ctx.stroke();
-    ctx.fillText(v.toFixed(1)+(thi?'':rh?'%':'°'), 4, y+7); }
+    ctx.beginPath(); ctx.moveTo(L,y); ctx.lineTo(W-8,y); ctx.stroke();
+    ctx.fillText(v.toFixed(1)+(thi?'':rh?'%':'°'), 4, y+4); }
   if (showThreshold){
     const yT = Y(threshold);
-    ctx.setLineDash([12,8]); ctx.strokeStyle=T.threshold; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(60,yT); ctx.lineTo(W-20,yT); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle=T.threshold; ctx.fillText('ambang '+threshold.toFixed(1)+(thi?' THI':'°C'), 70, yT-10);
+    ctx.setLineDash([6,4]); ctx.strokeStyle=T.threshold; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(L,yT); ctx.lineTo(W-8,yT); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=T.threshold; ctx.fillText('threshold '+threshold.toFixed(1)+(thi?' THI':'°C'), L+8, yT-6);
   }
   const draw = (idx, color, get) => {
-    ctx.strokeStyle=color; ctx.lineWidth = idx==='avg'?5:2.5; ctx.beginPath();
+    ctx.strokeStyle=color; ctx.lineWidth = idx==='avg'?2.5:1.5; ctx.lineJoin='round'; ctx.beginPath();
     let drawing = false, previous = null;
     data.forEach((d,i)=>{
       const value = get(d);

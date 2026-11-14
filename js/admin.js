@@ -63,7 +63,7 @@
       heading.append(toggle);
       const a=SCSAccess.normalize({...user,enabled:true}),options=node('fieldset',null,'permission-options');options.append(node('legend','Izin Kandang A'));
       const inputs={};
-      for(const [key,label,description] of [['monitor','Monitoring','Sensor & riwayat'],['settings','Pengaturan','Ambang & jadwal'],['operate','Operasi sprinkler','Mode & manual']]){
+      for(const [key,label,description] of [['monitor','Monitoring','Sensor & riwayat'],['settings','Pengaturan','Threshold & jadwal'],['operate','Operasi sprinkler','Mode & manual']]){
         const choice=checkbox(label,a.permissions[key],description);inputs[key]=choice.input;options.append(choice.wrap);
         choice.input.onchange=()=>{if(key!=='monitor'&&choice.input.checked)inputs.monitor.checked=true;if(key==='monitor'&&!choice.input.checked){inputs.settings.checked=false;inputs.operate.checked=false;}};
       }

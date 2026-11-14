@@ -44,7 +44,6 @@ h1, h2, h3, h4 { text-wrap: balance; }
 .brand-mark .icon { width: 24px; height: 24px; }
 .brand-text { display: flex; flex-direction: column; min-width: 0; }
 .brand-name { font-size: 24px; font-weight: 750; letter-spacing: -.03em; line-height: 1.1; }
-.brand-period { color: #ffad78; }
 .brand-full { margin-top: 4px; font-size: 11.5px; font-weight: 600; letter-spacing: .03em; line-height: 1.3; color: #b9c5d6; }
 .hint { font-size: 14px; color: var(--muted); line-height: 1.65; }
 .icon-button { width: 44px; height: 44px; border: 1px solid var(--line); color: var(--txt); background: var(--card); display: inline-grid; place-items: center; border-radius: 10px; transition: background .15s, border-color .15s, color .15s; }
@@ -54,7 +53,6 @@ h1, h2, h3, h4 { text-wrap: balance; }
 .session-panel { min-height: 100svh; display: grid; place-items: center; padding: 24px; background: var(--bg); }
 .session-card { width: min(420px, 100%); text-align: center; padding: 40px 28px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
 .session-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--txt); font-size: 30px; font-weight: 750; letter-spacing: -.03em; }
-.session-brand > span { color: var(--warm); margin-left: -9px; }
 .session-brand .icon { width: 30px; height: 30px; color: var(--warm); }
 .session-card h1 { font-size: 22px; line-height: 1.4; margin: 22px 0 8px; }
 .session-card p { color: var(--muted); font-size: 15px; line-height: 1.7; margin: 0 0 20px; }
@@ -193,6 +191,13 @@ h1, h2, h3, h4 { text-wrap: balance; }
 .page-heading h1 { font-weight: 700; letter-spacing: -.03em; font-size: 32px; margin: 0 0 6px; line-height: 1.2; overflow-wrap: anywhere; }
 .page-heading p { color: var(--muted); font-size: 15.5px; margin: 0; line-height: 1.65; max-width: 62ch; text-wrap: pretty; }
 .heading-period { color: var(--warm); }
+.brand-heading { align-items: flex-end; }
+.brand-masthead { display: grid; gap: 3px; padding-left: 14px; border-left: 3px solid var(--warm); margin-bottom: 20px; }
+.page-heading .brand-title { margin: 0; font-size: 34px; font-weight: 800; letter-spacing: .06em; line-height: 1.1; }
+.page-heading .brand-expansion { max-width: none; color: var(--warm); font-size: 12.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; line-height: 1.4; }
+.page-heading .brand-slogan { max-width: none; color: var(--txt); font-size: 15.5px; line-height: 1.5; text-wrap: balance; }
+.page-heading .greeting { margin: 0 0 4px; font-size: 22px; font-weight: 650; letter-spacing: -.02em; line-height: 1.3; }
+.page-heading .welcome { max-width: none; white-space: nowrap; }
 .clock-card { flex: none; text-align: right; padding: 12px 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
 .clock-card > div:first-child { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .clock-card .icon { width: 16px; height: 16px; color: var(--muted); }
@@ -329,10 +334,14 @@ h1, h2, h3, h4 { text-wrap: balance; }
 select { background: var(--field); border: 1px solid var(--muted); border-radius: 8px; color: var(--txt); min-height: 44px; padding: 10px 12px; max-width: 100%; font-size: 14px; }
 .checkbox-label { display: flex; align-items: center; gap: 8px; color: var(--txt); font-size: 14px; white-space: nowrap; min-height: 44px; }
 input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--blue-solid); }
-.legend { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--txt); min-height: 15px; margin-bottom: 14px; }
-.legend span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 0; }
+.legend { display: flex; align-items: center; gap: 0 12px; flex-wrap: wrap; font-size: 13px; color: var(--txt); min-height: 15px; margin-bottom: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; }
 .legend span i { width: 8px !important; height: 8px !important; }
 #chart { width: 100%; height: 250px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); display: block; }
+.chart-frame { position: relative; }
+.chart-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 4px; padding: 16px; text-align: center; pointer-events: none; }
+.chart-empty b { font-size: 16px; font-weight: 650; color: var(--txt); }
+.chart-empty span { font-size: 14px; color: var(--muted); text-wrap: balance; }
 .chart-bottom { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
 .chart-bottom .hint { font-size: 13px; }
 .chart-explainer { display: flex; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; margin-top: 18px; color: var(--muted); }
@@ -596,6 +605,7 @@ td.cold { color: var(--positive-txt); }
   .admin-grid { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 24px; }
 }
 @media (max-width: 980px) {
+  .page-heading .welcome-lead, .page-heading .welcome-extra { display: none; }
   .sidebar { box-shadow: 12px 0 40px #05080e55; }
   .app-shell.sidebar-open .workspace { margin-left: 0; }
   .admin-grid { grid-template-columns: minmax(0, 1fr); gap: 24px; }
@@ -613,6 +623,8 @@ td.cold { color: var(--positive-txt); }
   .top-right { gap: 8px; }
   .topbar-divider { display: none; }
   .page-heading { align-items: flex-start; flex-direction: column; }
+  .page-heading .brand-title { font-size: 30px; }
+  .brand-heading { align-items: flex-start; }
   .page-heading p { font-size: 14.5px; }
   .clock-card { text-align: left; padding: 10px 14px; }
   .clock-card > div:first-child { justify-content: flex-start; }
@@ -646,6 +658,11 @@ td.cold { color: var(--positive-txt); }
   .page-heading h1 { font-size: 27px; max-width: 100%; }
   .clock-card { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
   .date-line { margin: 0; }
+  .page-heading .brand-title { font-size: 28px; letter-spacing: .05em; }
+  .page-heading .brand-expansion { font-size: 11.5px; letter-spacing: .12em; }
+  .page-heading .brand-slogan { font-size: 14.5px; }
+  .page-heading .greeting { font-size: 20px; }
+  .brand-masthead { margin-bottom: 14px; }
   .farm-hero { grid-template-columns: 1fr; gap: 8px; padding: 16px 18px; }
   .hero-art { display: none; }
   .summary-grid { grid-template-columns: 1fr; }
@@ -687,6 +704,8 @@ td.cold { color: var(--positive-txt); }
   .topbar { padding: 8px 12px; }
   .container { padding-left: 12px; padding-right: 12px; }
   .page-heading h1 { font-size: 25px; }
+  .page-heading .brand-title { font-size: 26px; }
+  .page-heading .brand-expansion { letter-spacing: .1em; }
   .control-card #protectGroup .form-grid { grid-template-columns: 1fr; }
   .grid-6, .humidity-grid { grid-template-columns: 1fr; }
   .manual-controls { flex-direction: column; }

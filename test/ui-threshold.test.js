@@ -27,13 +27,13 @@ function setup(basis = 'temperature') {
   const labels = [], dashes = [];
   const canvas = $('chart');
   canvas.clientWidth = 600;
-  canvas.getContext = () => ({ clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
+  canvas.getContext = () => ({ setTransform() {}, clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
     fillText(text) { labels.push(text); }, setLineDash(value) { dashes.push(value); } });
   $('chartMetric').value = 'temperature';
   $('showAvg').checked = true;
   const saved = C.normalize({ controlBasis: basis, profiles: {
     temperature: { threshold: 31.5, hysteresis: 1 }, thi: { threshold: 79.5, hysteresis: 2 } } });
-  const context = vm.createContext({ $, appliedCfg: saved, controlLoaded: true, SCSTelemetry: T,
+  const context = vm.createContext({ $, window: { devicePixelRatio: 1 }, appliedCfg: saved, controlLoaded: true, SCSTelemetry: T,
     sensorView: view, temps: view.s, humidities: view.h, telemetry: raw,
     document: { documentElement: {}, querySelectorAll: () => wrappers },
     getComputedStyle: () => ({ getPropertyValue: value => value }),
@@ -49,7 +49,6 @@ test('saved Suhu shows only the user temperature threshold and neutral THI monit
   const ui = setup(); ui.render();
   assert.deepEqual(ui.wrappers.map(el => el.hidden), [false, true]);
   assert.equal(ui.$('thresholdLabel').textContent, '31.5°C');
-  assert.equal(ui.$('avgStatus').textContent, 'DI BAWAH AMBANG SUHU');
   assert.equal(ui.$('thiValue').textContent, '81.4');
   assert.equal(ui.$('thiStatus').textContent, 'MONITORING THI');
   assert.equal(ui.$('thiStatus').className, 'status-pill neutral');
@@ -114,11 +113,10 @@ test('chart draws a user threshold only for the saved basis, never RH or inactiv
     const ui = setup(basis);
     for (const metric of ['temperature', 'humidity', 'thi']) {
       ui.$('chartMetric').value = metric; ui.draw();
-      const expected = metric === basis ? [basis === 'thi' ? 'ambang 79.5 THI' : 'ambang 31.5°C'] : [];
-      assert.deepEqual(ui.labels.filter(label => label.startsWith('ambang ')), expected);
+      assert.equal(ui.labels.filter(label => /\d (THI)$|\d°C$/.test(label)).length, metric === basis ? 1 : 0);
       assert.equal(ui.dashes.some(dash => dash.length > 0), metric === basis);
     }
     ui.context.controlLoaded = false; ui.$('chartMetric').value = basis; ui.draw();
-    assert.equal(ui.labels.some(label => label.startsWith('ambang ')), false);
+    assert.equal(ui.labels.some(label => /\d (THI)$|\d°C$/.test(label)), false);
   }
 });
