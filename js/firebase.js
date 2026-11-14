@@ -2,11 +2,11 @@ import {initializeApp,getApps,deleteApp} from 'https://www.gstatic.com/firebasej
 import {getDatabase,ref,onValue,update,set,remove,push,query,orderByChild,limitToLast,serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js';
 import {getAuth,signInWithEmailAndPassword,onAuthStateChanged,signOut,initializeAuth,inMemoryPersistence,createUserWithEmailAndPassword,deleteUser} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 
-let db,auth,callbacks={},unsubs=[],accessUnsub=null,timeOffset=0,access=null,generation=0;
+let db,auth,callbacks={},unsubs=[],accessUnsub=null,timeOffset=0,access=null,generation=0,latestTelemetry=null;
 const base=()=>`devices/${window.FIREBASE_CONFIG?.deviceId || 'cow-sprinkler-01'}`;
 const can=p=>window.SCSAccess.can(access,p);
 function stopData(){unsubs.forEach(fn=>fn());unsubs=[];}
-function stopSession(){stopData();accessUnsub?.();accessUnsub=null;access=null;}
+function stopSession(){stopData();accessUnsub?.();accessUnsub=null;access=null;latestTelemetry=null;}
 function need(permission){if(!auth?.currentUser || !can(permission))throw new Error('Akun tidak memiliki izin untuk tindakan ini.');}
 function listen(session){
   stopData();
@@ -16,8 +16,12 @@ function listen(session){
   unsubs.push(onValue(ref(db,'.info/connected'),snap=>{if(active())callbacks.onTransport?.(snap.val()===true);}));
   if(!can('monitor'))return;
   const watch=(path,fn)=>unsubs.push(onValue(ref(db,path),snap=>{if(active()&&can('monitor'))fn(snap.val());},failed));
-  watch(base()+'/telemetry/latest',value=>callbacks.onTelemetry?.(value));
+  watch(base()+'/telemetry/latest',value=>{latestTelemetry=value;callbacks.onTelemetry?.(value);});
   watch(base()+'/control',value=>callbacks.onControl?.(value));
+  unsubs.push(onValue(query(ref(db,base()+'/herd/days'),limitToLast(7)),snap=>{
+    if(!active()||!can('monitor'))return;
+    callbacks.onHerd?.(snap.val()||{});
+  },()=>{if(active()&&can('monitor'))callbacks.onHerd?.(null);}));
   for(const [path,count,callback,convert] of [
     ['/events',50,'onEvents',raw=>({t:raw.ts,msg:String(raw.reason||raw.type||'Aktivitas sprinkler')})],
     ['/telemetry/log',120,'onSeedLogs',raw=>SCSTelemetry.logRow(raw)]]){
@@ -55,8 +59,11 @@ async function connect(handlers){
   },error=>callbacks.onAuthError?.(error));
 }
 async function login(email,password){if(!auth)throw new Error('Firebase belum siap.');return signInWithEmailAndPassword(auth,email,password);}
+function now(){return Date.now()+timeOffset;}
 function pushControl(obj){
   for(const key of Object.keys(obj))need(key==='mode'||key==='manualSsr'?'operate':'settings');
+  if(obj.controlPolicyVersion===3 && !window.SCSControl.canApplyV3(latestTelemetry,now()))
+    throw new Error('Firmware belum melaporkan dukungan kontrol v3. Pengaturan tidak dikirim.');
   return update(ref(db,base()+'/control'),{...obj,updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid});
 }
 async function pushOverride(on,reason){need('operate');await pushControl({manualSsr:on?'on':'off'});await pushEvent(reason||(on?'Manual ON diminta':'Manual OFF diminta'));}
@@ -98,5 +105,4 @@ async function removeUserAccess(uid){
   need('admin');if(uid===auth.currentUser.uid)throw new Error('Akun sendiri tidak dapat dihapus.');
   return remove(ref(db,`access/${uid}`));
 }
-window.SCSFirebase={connect,login,logout:()=>signOut(auth),pushControl,pushOverride,pushEvent,subscribeUsers,saveUser,createUser,removeUserAccess,
-  now:()=>Date.now()+timeOffset};
+window.SCSFirebase={connect,login,logout:()=>signOut(auth),pushControl,pushOverride,pushEvent,subscribeUsers,saveUser,createUser,removeUserAccess,now};

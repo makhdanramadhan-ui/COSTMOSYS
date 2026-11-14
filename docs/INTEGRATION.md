@@ -34,16 +34,24 @@ dengan alias field lama ditolak parser dan tetap offline.
 ```bash
 node --test test/*.test.js          # parser, kontrol, UI statis, kontrak firmware
 cd test/rbac && npm ci
-npm run test                        # 201 pemeriksaan RBAC emulator (rules.cjs)
-npm run test:integration            # 41 pemeriksaan jalur data (integration.cjs)
+npm run test                        # 231 pemeriksaan RBAC emulator (rules.cjs)
+npm run test:integration            # 55 pemeriksaan jalur data (integration.cjs)
+node ../../scripts/build-rules.cjs --check
 ```
 
 `test:integration` menjalankan emulator database dengan `database.rules.json` asli, menulis payload
 kanonik seperti firmware, lalu membaca sebagai akun monitor/settings/operate. Yang dibuktikan: izin
 baca per peran dan penolakan tulis telemetri, parsing `SCSTelemetry.view` (online, 6 DS + 4 RH, THI,
-relay, node kiri), kedaluwarsa 15 detik, penolakan alias field, query `orderByChild('ts')` untuk log
-dan event, kontrak event `{type,reason,ts}` yang tidak dapat ditimpa, serta round-trip profil kontrol
-v2 (`temp*` dan `thi*` tidak tercampur). Semua memakai project `demo-*`; tidak ada produksi.
+relay, node kiri, fase siklus v3), kedaluwarsa 15 detik, penolakan alias field, query
+`orderByChild('ts')` untuk log dan event, kontrak event `{type,reason,ts}` yang tidak dapat ditimpa,
+serta round-trip profil kontrol v3 (`temp*` dan `thi*` tidak tercampur, kuota harian global, cooldown
+hingga 86400 detik, tanpa hysteresis). Batas siklus yang diuji: mulai 10:30, berhenti 10:40,
+cooldown 7200 detik sehingga 12:39 belum layak dan 12:40 layak; kuota bersama memblokir mulai
+keempat; hari WIB baru hanya membuka kuota dari waktu perangkat tepercaya; snapshot setelah reboot
+tetap membawa hari, kuota, dan cooldown tanpa menghitung ulang siklus yang terputus. Batas rules
+yang diuji: kuota 1..100, durasi 1..10800 detik, cooldown 0..86400 detik, jadwal 1..180 menit,
+enam slot, serta penolakan hysteresis dan key legacy. Semua memakai project `demo-*`; tidak ada
+produksi.
 
 Bukti serialisasi firmware saat ini tidak dapat dieksekusi: tidak ada test yang memeriksa sumber
 serializer firmware, dan yang dapat dijalankan hanya sisi pembacaan dashboard (emulator di atas).

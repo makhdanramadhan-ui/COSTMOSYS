@@ -13,6 +13,9 @@
 #include <DallasTemperature.h>
 #include <time.h>
 #include <math.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Preferences.h>
 #include "ClimatePolicy.h"
 
 #define WIFI_SSID "GANTI_WIFI_SSID"
@@ -27,6 +30,12 @@ const uint8_t DHT_PINS[2] = {19, 25};
 constexpr uint8_t HUMIDITY_LABEL_BASE = 1;
 constexpr uint8_t SSR_PIN = 23;
 constexpr bool SSR_ACTIVE_HIGH = true;
+constexpr uint8_t LCD_SDA_PIN = 21;
+constexpr uint8_t LCD_SCL_PIN = 22;
+constexpr uint8_t LCD_COLS = 16;
+constexpr uint8_t LCD_ROWS = 2;
+constexpr uint32_t LCD_UPDATE_MS = 1000;
+const uint8_t LCD_ADDRS[] = {0x27, 0x3F};
 constexpr uint32_t LEFT_TIMEOUT_MS = 10000;
 constexpr uint32_t LOCAL_TIMEOUT_MS = 3000;
 constexpr uint32_t CONVERSION_MS = 800;
@@ -40,7 +49,7 @@ constexpr uint32_t WIFI_RETRY_MS = 30000;
 constexpr uint32_t WIFI_CONNECT_WINDOW_MS = 10000;
 constexpr uint8_t MAX_SLOTS = 6;
 const char FW_VERSION[] = "3.1.1-final-thi-mac-check";
-constexpr uint8_t CONTROL_POLICY_VERSION = 2;
+constexpr uint8_t CONTROL_POLICY_VERSION = 3;
 
 constexpr uint32_t PACKET_MAGIC = 0x53435732;
 constexpr uint8_t PACKET_VERSION = 3;
@@ -75,7 +84,7 @@ struct ControlConfig {
   char mode[8], manual[8], autoSource[10];
   bool useThi;
   float threshold, hysteresis;
-  int maxDuration, cooldown, slotCount;
+  int maxDuration, cooldown, slotCount, maxCycles;
   ScheduleSlot slots[MAX_SLOTS];
   bool legacySchedule;
   char legacyStart[8];
@@ -94,6 +103,10 @@ struct Snapshot {
   uint32_t temperatureAgeMs[6];
   float thi;
   bool thiComplete, useThi;
+  CycleStored cycle;
+  CycleSource cycleSource;
+  int32_t cycleRemain;
+  bool cycleClock;
 };
 struct RelayEvent {
   char type[24], reason[80];
@@ -133,9 +146,72 @@ uint8_t pairedLeft[6] = {};
 bool leftPaired = false, relayOn = false;
 uint32_t sprayStart = 0, lastSprayEnd = 0, lastPrint = 0;
 ControlConfig control;
+CycleState cycleState = {};
+bool manualOffEdge = false, manualObserved = false;
+Preferences cyclePrefs;
+struct CycleRecord { CycleStored state; uint32_t crc; };
+uint32_t cycleCrc(const uint8_t *data, size_t size) {
+  uint32_t crc = 0xffffffff;
+  while (size--) { crc ^= *data++; for (int i = 0; i < 8; i++) crc = (crc >> 1) ^ (0xedb88320u & -(crc & 1u)); }
+  return ~crc;
+}
+bool saveCycle(const CycleStored &state) {
+  CycleRecord record = {};
+  record.state = state;
+  record.crc = cycleCrc((const uint8_t *)&record.state, sizeof(record.state));
+  return cyclePrefs.putBytes("state", &record, sizeof(record)) == sizeof(record);
+}
 QueueHandle_t receiveQueue, controlQueue, snapshotQueue, eventQueue;
 WiFiClientSecure tls;
 HTTPClient http;
+LiquidCrystal_I2C *lcd = nullptr;
+bool lcdReady = false;
+uint32_t lastLcdUpdate = 0;
+char lastLcdRow0[17] = "";
+char lastLcdRow1[17] = "";
+
+void beginLcd() {
+  Wire.begin(LCD_SDA_PIN, LCD_SCL_PIN);
+  Wire.setTimeOut(50);
+  for (uint8_t addr : LCD_ADDRS) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      lcd = new LiquidCrystal_I2C(addr, LCD_COLS, LCD_ROWS);
+      lcd->init();
+      lcd->backlight();
+      lcdReady = true;
+      lastLcdUpdate = millis() - LCD_UPDATE_MS;
+      Serial.printf("LCD I2C terdeteksi di 0x%02X (%ux%u)\n", addr, LCD_COLS, LCD_ROWS);
+      return;
+    }
+  }
+  Serial.println("LCD I2C tidak terdeteksi (0x27/0x3F); lanjut tanpa LCD.");
+}
+
+void serviceLcd(const Snapshot &state) {
+  if (!lcdReady || !lcd) return;
+  uint32_t now = millis();
+  if (uint32_t(now - lastLcdUpdate) < LCD_UPDATE_MS) return;
+  lastLcdUpdate = now;
+  char row0[17];
+  char row1[17];
+  formatLcdRows(
+    state.avg, state.validCount > 0 && isfinite(state.avg),
+    state.humidityAvg, state.humidityValidCount > 0 && isfinite(state.humidityAvg),
+    state.thi, state.thiComplete && isfinite(state.thi),
+    row0, row1
+  );
+  if (strcmp(row0, lastLcdRow0) != 0) {
+    lcd->setCursor(0, 0);
+    lcd->print(row0);
+    strcpy(lastLcdRow0, row0);
+  }
+  if (strcmp(row1, lastLcdRow1) != 0) {
+    lcd->setCursor(0, 1);
+    lcd->print(row1);
+    strcpy(lastLcdRow1, row1);
+  }
+}
 
 ControlConfig defaultControl() {
   ControlConfig cfg = {};
@@ -146,6 +222,7 @@ ControlConfig defaultControl() {
   cfg.hysteresis = 1.0f;
   cfg.maxDuration = 120;
   cfg.cooldown = 60;
+  cfg.maxCycles = 3;
   strcpy(cfg.legacyStart, "12:00");
   cfg.legacyDuration = 10;
   return cfg;
@@ -408,26 +485,17 @@ bool schedActiveNow() {
 }
 
 void applyLogic(const Snapshot &state) {
-  uint32_t now = millis();
-  if (strcmp(control.mode, "manual") == 0) {
-    bool on = strcmp(control.manual, "on") == 0;
-    setRelay(on, on ? "manual_on" : "manual_off", "perintah web", state.avg);
-    return;
-  }
-  ClimateInput input = {control.useThi ? state.thi : state.avg, control.threshold, control.hysteresis,
-    relayOn, control.useThi ? state.thiComplete : state.complete,
-    strcmp(control.autoSource,"schedule") == 0, state.scheduleOn,
-    uint32_t(now-sprayStart)/1000UL, uint32_t(now-lastSprayEnd)/1000UL,
-    uint32_t(control.maxDuration), uint32_t(control.cooldown)};
-  ClimateDecision decision = climateDecision(input);
-  if (decision == ClimateDecision::On)
-    setRelay(true,"auto_on",control.useThi ? "THI >= threshold" : "suhu DS >= threshold",state.avg);
-  else if (decision == ClimateDecision::Off) {
-    const char *reason = !input.complete ? "sensor tidak lengkap / stale" :
-      input.scheduled && !input.windowActive ? "di luar jendela jadwal / jam belum valid" :
-      input.on && input.runSeconds >= input.maxDuration ? "durasi maks" : "hysteresis";
-    setRelay(false,"auto_off",reason,state.avg);
-  }
+  time_t now = time(nullptr);
+  CycleEnv env = {};
+  env.nowMs = millis(); env.epochMs = int64_t(now) * 1000; env.clockReady = now >= 1700000000;
+  env.maxCycles = control.maxCycles; env.maxDurationS = control.maxDuration; env.cooldownS = control.cooldown;
+  env.manualMode = !strcmp(control.mode, "manual"); env.manualOn = !strcmp(control.manual, "on");
+  env.autoSchedule = !strcmp(control.autoSource, "schedule"); env.scheduleActive = state.scheduleOn;
+  env.thiBasis = control.useThi; env.completeTemp = state.complete; env.completeThi = state.thiComplete;
+  env.manualOffEdge = manualOffEdge; manualOffEdge = false;
+  env.value = control.useThi ? state.thi : state.avg; env.threshold = control.threshold;
+  CycleOut result = cycleStep(cycleState, env, saveCycle);
+  if (result.relayOn != relayOn) setRelay(result.relayOn, result.type, result.reason, state.avg);
 }
 
 String devPath(const char *leaf) {
@@ -489,6 +557,15 @@ void fillHumidity(JsonDocument &doc, const Snapshot &state) {
 void fillTelemetry(JsonDocument &doc, const Snapshot &state) {
   doc["schemaVersion"] = 3;
   doc["controlPolicyVersion"] = CONTROL_POLICY_VERSION;
+  doc["ntpValid"] = state.cycleClock;
+  if (state.cycleClock && state.cycle.day[0]) doc["cycleDay"] = state.cycle.day; else doc["cycleDay"] = nullptr;
+  doc["cyclesToday"] = state.cycle.cyclesToday;
+  doc["cyclePhase"] = cyclePhaseName(CyclePhase(state.cycle.phase));
+  if (state.cycleRemain >= 0) doc["cycleRemainSec"] = state.cycleRemain; else doc["cycleRemainSec"] = nullptr;
+  const char *source = cycleSourceName(state.cycleSource);
+  if (source) doc["cycleSource"] = source; else doc["cycleSource"] = nullptr;
+  doc["sprayStartedTs"] = state.cycle.sprayStartedTs;
+  doc["cooldownUntilTs"] = state.cycleClock ? state.cycle.cooldownUntilTs : 0;
   doc["controlBasis"] = state.useThi ? "thi" : "temperature";
   doc["thiComplete"] = state.thiComplete;
   if (state.thiComplete) doc["thi"] = state.thi;
@@ -579,9 +656,10 @@ bool parseControl(const String &body, ControlConfig &out) {
   const char *mode = doc["mode"] | "auto";
   const char *manual = doc["manualSsr"] | "off";
   bool legacy = doc["schOn"].is<bool>() ? doc["schOn"].as<bool>() : doc["schOn"].as<int>() != 0;
-  bool policyV2 = doc["controlPolicyVersion"].as<int>() == CONTROL_POLICY_VERSION;
+  int version = doc["controlPolicyVersion"] | 0;
+  bool policyV2 = version == 2 || version == 3;
   const char *basis = doc["controlBasis"] | "temperature";
-  if ((doc["controlPolicyVersion"].is<int>() && !policyV2) ||
+  if ((version && !policyV2) ||
       (strcmp(basis,"temperature") && strcmp(basis,"thi")) || (!policyV2 && !strcmp(basis,"thi"))) return false;
   String prefix = !strcmp(basis,"thi") ? "thi" : "temp";
   const char *source = policyV2 ? (doc[prefix+"AutoSrc"] | "threshold") : (doc["autoSrc"] | (legacy ? "schedule" : "threshold"));
@@ -594,16 +672,16 @@ bool parseControl(const String &body, ControlConfig &out) {
   strlcpy(out.manual, manual, sizeof(out.manual));
   strlcpy(out.autoSource, source, sizeof(out.autoSource));
   out.threshold = policyV2 ? (doc[prefix+"Threshold"] | (out.useThi ? 72.0f : 30.0f)) : (doc["threshold"] | 30.0f);
-  out.hysteresis = policyV2 ? (doc[prefix+"Hysteresis"] | (out.useThi ? 2.0f : 1.0f)) : (doc["hysteresis"] | 1.0f);
   out.maxDuration = policyV2 ? (doc[prefix+"MaxDuration"] | 120) : (doc["maxDuration"] | 120);
   out.cooldown = policyV2 ? (doc[prefix+"Cooldown"] | 60) : (doc["cooldown"] | 60);
   out.slotCount = policyV2 ? (doc[prefix+"SchN"] | 0) : (doc["schN"] | 0);
+  out.maxCycles = doc["maxCyclesPerDay"] | 3;
   out.legacySchedule = !policyV2 && legacy;
   out.legacyDuration = doc["schDur"] | 10;
   strlcpy(out.legacyStart, doc["schStart"] | "12:00", sizeof(out.legacyStart));
-  if (!isfinite(out.threshold) || out.threshold < (out.useThi ? 0 : -55) || out.threshold > (out.useThi ? 120 : 125) || !isfinite(out.hysteresis) || out.hysteresis < 0 ||
-      out.hysteresis > 50 || out.maxDuration < 1 || out.maxDuration > 10800 ||
-      out.cooldown < 0 || out.cooldown > 10800 || out.slotCount < 0 || out.slotCount > MAX_SLOTS ||
+  if (!isfinite(out.threshold) || out.threshold < (out.useThi ? 0 : -55) || out.threshold > (out.useThi ? 120 : 125) ||
+      out.maxDuration < 1 || out.maxDuration > 10800 || out.maxCycles < 1 || out.maxCycles > 100 ||
+      out.cooldown < 0 || out.cooldown > 86400 || out.slotCount < 0 || out.slotCount > MAX_SLOTS ||
       out.legacyDuration < 1 || out.legacyDuration > 180) return false;
   for (int i = 0; i < out.slotCount; i++) {
     char key[16];
@@ -624,19 +702,12 @@ void createDefaultControl() {
   doc["controlPolicyVersion"] = CONTROL_POLICY_VERSION;
   doc["controlBasis"] = "temperature";
   doc["tempThreshold"] = 30.0; doc["thiThreshold"] = 72.0;
-  doc["tempHysteresis"] = 1.0; doc["thiHysteresis"] = 2.0;
+  doc["maxCyclesPerDay"] = 3;
   doc["tempMaxDuration"] = doc["thiMaxDuration"] = 120;
   doc["tempCooldown"] = doc["thiCooldown"] = 60;
   doc["tempAutoSrc"] = doc["thiAutoSrc"] = "threshold";
   doc["tempSchN"] = doc["thiSchN"] = 0;
-  doc["autoSrc"] = "threshold";
   doc["manualSsr"] = "off";
-  doc["threshold"] = 30.0;
-  doc["hysteresis"] = 1.0;
-  doc["maxDuration"] = 120;
-  doc["cooldown"] = 60;
-  doc["schN"] = 0;
-  doc["schOn"] = 0;
   doc["updatedBy"] = "espkanan_FINAL";
   String body;
   serializeJson(doc, body);
@@ -757,7 +828,15 @@ void setup() {
   pinMode(SSR_PIN, OUTPUT);
   delay(250);
   Serial.printf("SmartCow KANAN | firmware %s | Serial 115200\n", FW_VERSION);
+  beginLcd();
   control = defaultControl();
+  bool nvs = cyclePrefs.begin("cycles-v3", false);
+  CycleRecord record = {};
+  size_t length = nvs ? cyclePrefs.getBytesLength("state") : 0;
+  bool fresh = nvs && !cyclePrefs.isKey("state");
+  bool corrupt = !nvs || (!fresh && (length != sizeof(record) || cyclePrefs.getBytes("state", &record, sizeof(record)) != sizeof(record) || record.crc != cycleCrc((const uint8_t *)&record.state, sizeof(record.state))));
+  CycleEnv boot = {}; boot.nowMs = millis();
+  cycleRestore(cycleState, fresh, corrupt, record.state, boot);
   lastSprayEnd = millis() - uint32_t(control.cooldown) * 1000UL;
   receiveQueue = xQueueCreate(1, sizeof(ReceivedPacket));
   controlQueue = xQueueCreate(1, sizeof(ControlConfig));
@@ -783,14 +862,20 @@ void loop() {
   serviceSensors();
   serviceHumidity();
   ControlConfig updated;
-  if (xQueueReceive(controlQueue, &updated, 0) == pdTRUE) control = updated;
+  if (xQueueReceive(controlQueue, &updated, 0) == pdTRUE) {
+    manualOffEdge = manualObserved && !strcmp(control.manual, "on") && !strcmp(updated.manual, "off");
+    manualObserved = true; control = updated;
+  }
   Snapshot state;
   buildSnapshot(state);
   state.scheduleOn = strcmp(control.mode, "auto") == 0 &&
     strcmp(control.autoSource, "schedule") == 0 && schedActiveNow();
   applyLogic(state);
+  state.cycle = cycleState.p; state.cycleSource = cycleState.source;
+  state.cycleClock = cycleState.clockOk; state.cycleRemain = cycleRemainSec(cycleState, millis());
   state.relayOn = relayOn;
   xQueueOverwrite(snapshotQueue, &state);
+  serviceLcd(state);
   if (uint32_t(millis() - lastPrint) >= TELEMETRY_MS) {
     lastPrint = millis();
     Serial.printf("S1=%.2f S2=%.2f S3=%.2f | S4=%.2f S5=%.2f S6=%.2f | DS=%u/6 avg=%.2f "

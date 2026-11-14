@@ -26,7 +26,8 @@ test('settings save never includes mode or manual output while preserving both p
   const raw=C.toFirebase(C.normalize({mode:'manual',threshold:31}));
   const payload=A.settingsPayload({...raw,manualSsr:'on',updatedAt:12,updatedBy:'other'});
   for(const k of ['mode','manualSsr','updatedAt','updatedBy'])assert.equal(k in payload,false);
-  assert.equal(payload.tempThreshold,31);assert.equal(payload.thiThreshold,72);assert.equal(payload.controlPolicyVersion,2);
+  assert.equal(payload.tempThreshold,31);assert.equal(payload.thiThreshold,72);assert.equal(payload.controlPolicyVersion,3);
+  assert.equal('hysteresis' in payload,false);assert.equal(payload.maxCyclesPerDay,3);
 });
 test('explicit Admin creation grants all permissions but User edits cannot promote',()=>{
   const record=A.accountRecord({email:' ADMIN@example.com ',name:' Admin ',role:'admin'},123);

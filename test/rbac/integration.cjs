@@ -1,13 +1,14 @@
 const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
 const {ref,set,get,update,push,query,orderByChild,limitToLast,serverTimestamp}=require('firebase/database');
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
-const root=path.resolve(__dirname,'../..'),T=require('../../js/telemetry.js'),C=require('../../js/control.js'),A=require('../../js/access.js');
+const root=path.resolve(__dirname,'../..'),SCS=require('../../js/core.js'),T=require('../../js/telemetry.js'),C=require('../../js/control.js'),A=require('../../js/access.js');
 const projectId='demo-smartcow-integration',base='devices/cow-sprinkler-01';
 
 function canonical(nowMs,extra={}){
   return {
-    schemaVersion:3,controlPolicyVersion:2,controlBasis:'temperature',mode:'auto',autoSrc:'threshold',sch:0,n:6,
+    schemaVersion:3,controlPolicyVersion:3,controlBasis:'temperature',mode:'auto',autoSrc:'threshold',sch:0,n:6,
     ts:serverTimestamp(),measuredTs:nowMs,
+    ntpValid:true,cycleDay:'2026-11-14',cyclesToday:2,cyclePhase:'idle',cycleRemainSec:0,sprayStartedTs:0,cooldownUntilTs:0,
     t1:30,t2:31,t3:32,t4:33,t5:34,t6:35,
     temperatureAgeMs:[100,100,100,500,500,500],validMask:63,validCount:6,avg:32.5,complete:true,
     h1:70,h2:80,h3:60,h4:90,d1:31,d2:32,d3:33,d4:34,
@@ -52,6 +53,30 @@ function canonical(nowMs,extra={}){
     check('parser relay ssr',v.ssr===1);
     check('parser left node',v.leftOnline===true&&v.legacy===false);
     check('parser states online',v.dsStates.every(s=>s==='online')&&v.rhStates.every(s=>s==='online'));
+    check('parser cycle v3',v.cycle.capable===true&&v.cycle.ntpValid===true&&v.cycle.today===2&&v.cycle.phase==='idle'&&v.cycle.remainSec===0);
+    check('capability gate accepts fresh v3',C.canApplyV3(raw,raw.ts)===true);
+
+    const cycleCfg={threshold:30,maxDuration:600,cooldown:7200,maxCyclesPerDay:3,autoSrc:'threshold'};
+    const at=extra=>T.view(canonical(measured,{ts:measured,...extra}),measured);
+    const start=at({cyclesToday:1,cyclePhase:'spraying',cycleRemainSec:600,cycleSource:'threshold',sprayStartedTs:measured,cooldownUntilTs:0,ssr:1});
+    check('10:30 start maps active spray and first count',start.cycle.today===1&&start.cycle.phase==='spraying'&&start.cycle.remainSec===600&&start.ssr===1);
+    const stop=at({cyclesToday:1,cyclePhase:'cooldown',cycleRemainSec:7200,cycleSource:null,sprayStartedTs:0,cooldownUntilTs:measured+7200000,ssr:0});
+    check('10:40 OFF starts cooldown from the stop',stop.cycle.phase==='cooldown'&&stop.cycle.remainSec===7200&&stop.cycle.cooldownUntilTs===measured+7200000&&stop.ssr===0);
+    const ready={complete:true,clockValid:true,scheduleActive:true,runSeconds:0,offSeconds:0};
+    check('12:39 still cooling',SCS.decideAutomatic(31,false,cycleCfg,{...ready,offSeconds:7199,cyclesToday:stop.cycle.today})==='stay');
+    check('12:40 eligible after 7200 s',SCS.decideAutomatic(31,false,cycleCfg,{...ready,offSeconds:7200,cyclesToday:stop.cycle.today})==='on');
+    const capped=at({cyclesToday:3,cyclePhase:'idle',cycleRemainSec:0,cycleSource:null,sprayStartedTs:0,cooldownUntilTs:0,ssr:0});
+    check('quota blocks fourth start',SCS.decideAutomatic(31,false,cycleCfg,{...ready,offSeconds:999999,cyclesToday:capped.cycle.today})==='stay');
+    const tomorrow=at({cycleDay:'2026-11-15',cyclesToday:0,cyclePhase:'idle',cycleRemainSec:0,cycleSource:null,sprayStartedTs:0,cooldownUntilTs:0,ssr:0});
+    check('trusted new WIB day exposes reset count',tomorrow.cycle.day==='2026-11-15'&&tomorrow.cycle.today===0&&SCS.decideAutomatic(31,false,cycleCfg,{...ready,offSeconds:999999,cyclesToday:tomorrow.cycle.today})==='on');
+    check('untrusted clock blocks automatic start',SCS.decideAutomatic(31,false,cycleCfg,{...ready,offSeconds:999999,cyclesToday:0,clockValid:false})==='stay');
+    const rebootRaw={...canonical(measured),ts:measured,cycleDay:'2026-11-14',cyclesToday:2,cyclePhase:'cooldown',
+      cycleRemainSec:7000,cycleSource:null,sprayStartedTs:0,cooldownUntilTs:measured+7000000,ssr:0};
+    await env.withSecurityRulesDisabled(async c=>{await set(ref(c.database(),base+'/telemetry/latest'),rebootRaw);});
+    const reboot=(await get(ref(db('monitor'),base+'/telemetry/latest'))).val(),rv=T.view(reboot,measured);
+    check('reboot snapshot keeps day, quota and cooldown',rv.cycle.today===2&&rv.cycle.day==='2026-11-14'&&rv.cycle.phase==='cooldown'&&rv.cycle.remainSec===7000&&rv.cycle.cooldownUntilTs===measured+7000000);
+    check('reboot quota still blocks',SCS.decideAutomatic(31,false,{...cycleCfg,maxCyclesPerDay:2},{...ready,offSeconds:999999,cyclesToday:rv.cycle.today})==='stay');
+    check('capability survives reboot in cooldown',C.canApplyV3(reboot,measured)===true);
 
     const stale=T.view(raw,raw.ts+15000);
     check('expired snapshot offline',stale.online===false&&stale.ssr===null);
@@ -77,7 +102,7 @@ function canonical(nowMs,extra={}){
     check('event read maps app contract',events.length===1&&Number.isFinite(events[0].t)&&events[0].msg==='Manual ON emulator');
     await pass('event push settings allowed',push(ref(db('settings'),base+'/events'),{type:'web',reason:'setting',ts:serverTimestamp()}));
 
-    const payload=A.settingsPayload(C.toFirebase(C.normalize({controlBasis:'thi',profiles:{temperature:{threshold:31.5},thi:{threshold:74}}})));
+    const payload=A.settingsPayload(C.toFirebase(C.normalize({controlBasis:'thi',maxCyclesPerDay:4,profiles:{temperature:{threshold:31.5,cooldown:86400},thi:{threshold:74,cooldown:7200}}})));
     await pass('control settings write',update(ref(db('settings'),base+'/control'),{...payload,updatedAt:serverTimestamp(),updatedBy:'settings'}));
     await fail('control mode by settings denied',update(ref(db('settings'),base+'/control'),{mode:'manual',updatedAt:serverTimestamp(),updatedBy:'settings'}));
     await fail('control mode by monitor denied',update(ref(db('monitor'),base+'/control'),{mode:'manual',updatedAt:serverTimestamp(),updatedBy:'monitor'}));
@@ -86,9 +111,11 @@ function canonical(nowMs,extra={}){
 
     const ctl=(await get(ref(db('monitor'),base+'/control'))).val();
     const cfg=C.fromFirebase(ctl);
-    check('control v2 parsed',ctl.controlPolicyVersion===2&&cfg.controlBasis==='thi'&&cfg.mode==='manual');
+    check('control v3 parsed',ctl.controlPolicyVersion===3&&cfg.controlBasis==='thi'&&cfg.mode==='manual');
     check('control profiles stay separate',cfg.profiles.thi.threshold===74&&cfg.profiles.temperature.threshold===31.5);
     check('control round trip basis fields',ctl.thiThreshold===74&&ctl.tempThreshold===31.5&&ctl.thiSchN===0&&ctl.tempSchN===0);
+    check('control v3 quota and cooldown',cfg.maxCyclesPerDay===4&&cfg.profiles.temperature.cooldown===86400&&cfg.profiles.thi.cooldown===7200);
+    check('control v3 has no hysteresis',!('hysteresis' in cfg)&&!('tempHysteresis' in ctl)&&!('thiHysteresis' in ctl));
 
     const schedule=C.toFirebase(C.normalize({controlBasis:'temperature',autoSrc:'schedule',schedules:[{date:'2026-11-20',start:'14:00',dur:10}]}));
     await pass('control schedule write',update(ref(db('settings'),base+'/control'),{...A.settingsPayload(schedule),updatedAt:serverTimestamp(),updatedBy:'settings'}));
@@ -96,6 +123,6 @@ function canonical(nowMs,extra={}){
     check('schedule contract parsed',sched.profiles.temperature.autoSrc==='schedule'&&sched.profiles.temperature.schedules[0].start==='14:00'&&sched.schedules[0].dur===10);
     await fail('schedule invalid time denied',update(ref(db('settings'),base+'/control'),{tempSch1Start:'25:99',updatedAt:serverTimestamp(),updatedBy:'settings'}));
 
-    console.log(`INTEGRATION emulator PASS: ${count} checks; canonical telemetry -> dashboard parser, read permissions, control v2, events, log query.`);
+    console.log(`INTEGRATION emulator PASS: ${count} checks; canonical telemetry -> dashboard parser, read permissions, control v3, events, log query.`);
   }finally{await env.cleanup();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

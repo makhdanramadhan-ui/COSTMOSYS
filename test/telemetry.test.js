@@ -88,3 +88,34 @@ test('log THI is recalculated from valid measurement-time channels and preserves
   const r=T.logRow(sample({ts:now-60000,measuredTs:now-60000,controlBasis:'thi',controlPolicyVersion:2}));
   assert.equal(r.thi,SCS.thiOf(32.5,75)); assert.equal(r.controlBasis,'thi');
 });
+test('cycle runtime fields map only from a fresh v3 snapshot', () => {
+  const v=T.view(sample({controlPolicyVersion:3,ntpValid:true,cycleDay:'2026-11-14',cyclesToday:2,
+    cyclePhase:'cooldown',cycleRemainSec:3600,cycleSource:'threshold',sprayStartedTs:now-2400000,cooldownUntilTs:now+3600000}),now);
+  assert.deepEqual(v.cycle,{capable:true,ntpValid:true,day:'2026-11-14',today:2,phase:'cooldown',remainSec:3600,
+    source:'threshold',sprayStartedTs:now-2400000,cooldownUntilTs:now+3600000});
+});
+test('cycle state is unknown instead of zero and hidden while offline', () => {
+  const missing=T.view(sample({controlPolicyVersion:3}),now);
+  assert.equal(missing.cycle.today,null); assert.equal(missing.cycle.phase,null);
+  assert.equal(missing.cycle.remainSec,null); assert.equal(missing.cycle.cooldownUntilTs,null);
+  const offline=T.view(sample({controlPolicyVersion:3,ntpValid:true,cycleDay:'2026-11-14',cyclesToday:3,
+    cyclePhase:'spraying',cycleRemainSec:120,cycleSource:'manual',sprayStartedTs:now-60000}),now+20000);
+  assert.equal(offline.online,false); assert.equal(offline.cycle.phase,null); assert.equal(offline.cycle.remainSec,null);
+  assert.equal(offline.cycle.today,3); assert.equal(offline.cycle.day,'2026-11-14');
+});
+test('cycle view rejects invalid phase, source, day and noninteger counts', () => {
+  const v=T.view(sample({controlPolicyVersion:2,cycleDay:'14-11-2026',cyclesToday:2.5,
+    cyclePhase:'running',cycleSource:'auto'}),now);
+  assert.equal(v.cycle.capable,false); assert.equal(v.cycle.day,null); assert.equal(v.cycle.today,null);
+  assert.equal(v.cycle.phase,null); assert.equal(v.cycle.source,null);
+});
+test('post-reboot cooldown keeps persisted day/quota and a new WIB day surfaces a reset count', () => {
+  const reboot=T.view(sample({controlPolicyVersion:3,ntpValid:true,cycleDay:'2026-11-14',cyclesToday:2,
+    cyclePhase:'cooldown',cycleRemainSec:7000,cycleSource:null,sprayStartedTs:0,cooldownUntilTs:now+7000000}),now);
+  assert.deepEqual(reboot.cycle,{capable:true,ntpValid:true,day:'2026-11-14',today:2,phase:'cooldown',remainSec:7000,
+    source:null,sprayStartedTs:null,cooldownUntilTs:now+7000000});
+  const nextDay=T.view(sample({controlPolicyVersion:3,ntpValid:true,cycleDay:'2026-11-15',cyclesToday:0,
+    cyclePhase:'idle',cycleRemainSec:0,cycleSource:null,sprayStartedTs:0,cooldownUntilTs:0}),now);
+  assert.equal(nextDay.cycle.day,'2026-11-15'); assert.equal(nextDay.cycle.today,0);
+  assert.equal(nextDay.cycle.phase,'idle'); assert.equal(nextDay.cycle.cooldownUntilTs,null);
+});

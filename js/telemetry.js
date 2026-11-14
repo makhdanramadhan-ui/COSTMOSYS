@@ -11,6 +11,19 @@
     return good.length ? good.reduce((a, b) => a + b, 0) / good.length : null;
   };
   const ageAt = (ages, index, extra) => finite(ages?.[index]) && ages[index] >= 0 ? ages[index] + extra : null;
+  const PHASES = ['idle', 'spraying', 'cooldown'];
+  const SOURCES = ['threshold', 'schedule', 'manual'];
+  function cycleOf(raw, online, policyVersion) {
+    const phase = online && PHASES.includes(raw.cyclePhase) ? raw.cyclePhase : null;
+    return { capable: online && policyVersion === 3, ntpValid: raw.ntpValid === true,
+      day: typeof raw.cycleDay === 'string' && /^20[0-9]{2}-[0-9]{2}-[0-9]{2}$/.test(raw.cycleDay) ? raw.cycleDay : null,
+      today: Number.isInteger(raw.cyclesToday) && raw.cyclesToday >= 0 && raw.cyclesToday <= 100 ? raw.cyclesToday : null,
+      phase,
+      remainSec: phase && Number.isInteger(raw.cycleRemainSec) && raw.cycleRemainSec >= 0 ? raw.cycleRemainSec : null,
+      source: phase && SOURCES.includes(raw.cycleSource) ? raw.cycleSource : null,
+      sprayStartedTs: phase && finite(raw.sprayStartedTs) && raw.sprayStartedTs > 0 ? raw.sprayStartedTs : null,
+      cooldownUntilTs: phase === 'cooldown' && finite(raw.cooldownUntilTs) && raw.cooldownUntilTs > 0 ? raw.cooldownUntilTs : null };
+  }
   function view(raw, now = Date.now()) {
     raw = raw || {};
     const age = finite(raw.ts) ? now - raw.ts : Infinity;
@@ -45,8 +58,10 @@
     const avg = validCount && backendCount === validCount && temperature(raw.avg) ? raw.avg : average(s);
     const leftAge = finite(raw.leftAgeMs) ? raw.leftAgeMs + elapsed : null;
     const humidityAvg=average(h), thiComplete=validCount===6 && humidityValidCount===4;
+    const policyVersion=raw.controlPolicyVersion || 0;
     return { s, h, d, avg, humidityAvg, thi:thiComplete ? SCS.thiOf(avg,humidityAvg) : null, thiComplete, validCount, humidityValidCount,
-      controlPolicyVersion:raw.controlPolicyVersion || 0, controlBasis:raw.controlBasis === 'thi' ? 'thi' : 'temperature',
+      controlPolicyVersion:policyVersion, controlBasis:raw.controlBasis === 'thi' ? 'thi' : 'temperature',
+      cycle: cycleOf(raw, online, policyVersion),
       complete: validCount === 6, humidityComplete: humidityValidCount === 4,
       dsStates, rhStates, online, age, ts: raw.ts || null,
       leftOnline: online && raw.leftOnline === true && (leftAge === null || leftAge < 10000),

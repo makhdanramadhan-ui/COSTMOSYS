@@ -15,19 +15,19 @@ const projectId='demo-smartcow-access',base='devices/cow-sprinkler-01';
   try{
     await env.withSecurityRulesDisabled(async c=>{
       await set(ref(c.database(),'access'),{admin:{...user(true,true,true),role:'admin'},monitor:user(true,false,false),settings:user(true,true,false),operate:user(true,false,true),full:user(true,true,true),disabled:user(true,true,true,false)});
-      await set(ref(c.database(),base),{control:{...C.toFirebase(C.normalize({mode:'auto'})),manualSsr:'off'},telemetry:{latest:{ts:1},log:{a:{ts:1}}},events:{a:{type:'web',reason:'seed',ts:1}},status:{online:true}});
+      await set(ref(c.database(),base),{control:{...C.toFirebase(C.normalize({mode:'auto'})),manualSsr:'off'},telemetry:{latest:{ts:1},log:{a:{ts:1}}},herd:{days:{'2026-09-26':{run:{schemaVersion:1}}}},events:{a:{type:'web',reason:'seed',ts:1}},status:{online:true}});
     });
     for(const uid of [null,'unknown','disabled']){
-      for(const part of ['telemetry/latest','telemetry/log','control','events','status'])await fail(get(ref(db(uid),base+'/'+part)));
+      for(const part of ['telemetry/latest','telemetry/log','control','events','status','herd/days'])await fail(get(ref(db(uid),base+'/'+part)));
       await fail(update(ref(db(uid),base+'/control'),{mode:'manual'}));
       if(uid)await pass(get(ref(db(uid),'access/'+uid)));
       await fail(get(ref(db(uid),'access')));await fail(get(ref(db(uid),'access/admin')));
     }
     for(const uid of ['monitor','settings','operate','full','admin']){
-      for(const part of ['telemetry/latest','telemetry/log','control','events','status'])await pass(get(ref(db(uid),base+'/'+part)));
+      for(const part of ['telemetry/latest','telemetry/log','control','events','status','herd/days'])await pass(get(ref(db(uid),base+'/'+part)));
       await pass(get(ref(db(uid),'access/'+uid)));
       for(const target of ['devices',base,'devices/other/control'])await fail(get(ref(db(uid),target)));
-      for(const target of ['telemetry/latest','telemetry/log/new','status'])await fail(set(ref(db(uid),base+'/'+target),{ts:1,ssr:1}));
+      for(const target of ['telemetry/latest','telemetry/log/new','status','herd/days/2026-09-26/hack'])await fail(set(ref(db(uid),base+'/'+target),{ts:1,ssr:1}));
       if(uid!=='admin'){await fail(get(ref(db(uid),'access')));await fail(get(ref(db(uid),'access/admin')));}
     }
     const settings=A.settingsPayload(C.toFirebase(C.normalize({threshold:31.5})));
@@ -35,7 +35,8 @@ const projectId='demo-smartcow-access',base='devices/cow-sprinkler-01';
     for(const uid of ['monitor','operate','unknown','disabled'])await fail(update(ref(db(uid),base+'/control'),settings));
     for(const uid of ['operate','full','admin']){await pass(update(ref(db(uid),base+'/control'),{mode:'manual',manualSsr:'on',updatedAt:serverTimestamp(),updatedBy:uid}));await pass(update(ref(db(uid),base+'/control'),{manualSsr:'off'}));}
     for(const uid of ['monitor','settings'])for(const change of [{mode:'auto'},{manualSsr:'on'},{tempThreshold:32,mode:'auto'}])await fail(update(ref(db(uid),base+'/control'),change));
-    for(const [key,val] of [['tempThreshold',999],['thiThreshold',-1],['tempMaxDuration',0],['tempSchN',7],['thiSch1Start','25:99'],['manualSsr','yes'],['mode','other'],['hack',1],['updatedBy','other-user']])await fail(update(ref(db('admin'),base+'/control'),{[key]:val}));
+    for(const [key,val] of [['tempThreshold',999],['tempThreshold',-56],['tempThreshold',126],['thiThreshold',-1],['thiThreshold',121],['tempMaxDuration',0],['tempMaxDuration',10801],['tempMaxDuration',1.5],['tempSchN',7],['tempSch1Dur',181],['tempSch1Dur',0],['thiSch1Start','25:99'],['manualSsr','yes'],['mode','other'],['hack',1],['updatedBy','other-user'],['maxCyclesPerDay',0],['maxCyclesPerDay',101],['maxCyclesPerDay',2.5],['tempCooldown',86401],['thiCooldown',-1],['tempHysteresis',1],['thiHysteresis',1],['hysteresis',1],['schOn',1],['threshold',30],['cooldown',60]])await fail(update(ref(db('admin'),base+'/control'),{[key]:val}));
+    for(const change of [{maxCyclesPerDay:1},{maxCyclesPerDay:100},{tempCooldown:86400},{thiCooldown:0},{tempMaxDuration:10800},{tempThreshold:-55},{tempThreshold:125},{thiThreshold:0},{thiThreshold:120},{tempSchN:6},{tempSch1Dur:180},{controlPolicyVersion:3}])await pass(update(ref(db('admin'),base+'/control'),change));
     for(const uid of ['settings','operate','full','admin'])await pass(set(push(ref(db(uid),base+'/events')),{type:'web',reason:'test',ts:serverTimestamp()}));
     await fail(set(push(ref(db('monitor'),base+'/events')),{type:'web',reason:'hack',ts:1}));
     for(const value of [null,{type:'web',reason:'overwrite',ts:1}])await fail(set(ref(db('full'),base+'/events/a'),value));

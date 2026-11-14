@@ -30,7 +30,9 @@ Konversi DS18B20 dijadwalkan tanpa menahan seluruh loop selama menunggu hasil. F
 
 ### Kebijakan kontrol pada perangkat
 
-Kontrol otomatis dapat memakai rata-rata suhu enam DS18B20 atau THI agregat dari suhu DS dan kelembapan empat DHT22. Kedua dasar kontrol memiliki profil terpisah untuk threshold, hysteresis, durasi maksimum, cooldown, dan hingga enam jadwal bertanggal dalam WIB.
+Kontrol otomatis dapat memakai rata-rata suhu enam DS18B20 atau THI agregat dari suhu DS dan kelembapan empat DHT22. Kedua dasar kontrol memiliki profil terpisah untuk threshold, durasi penyiraman, cooldown, dan hingga enam jadwal bertanggal dalam WIB. Batas `maxCyclesPerDay` bersifat global: satu kuota dipakai bersama oleh kedua profil, kedua sumber otomatis, dan setiap perubahan konfigurasi.
+
+Threshold hanya menjadi syarat untuk memulai siklus. Siklus yang sudah berjalan menyelesaikan durasi penuh walaupun bacaan turun; penghentian lebih awal hanya terjadi bila sensor tidak lengkap atau kedaluwarsa, jendela jadwal berakhir, mode berpindah ke manual, atau ada perintah OFF. Cooldown dihitung dari saat penyiraman benar-benar berhenti, termasuk penghentian pengaman, dan kuota harian tetap terpakai. Tanpa waktu NTP yang valid tidak ada siklus otomatis baru, dan reboot atau jam mundur tidak mereset kuota.
 
 Jadwal diperlakukan sebagai jendela izin operasi, bukan perintah paksa ON. Threshold dan seluruh pengaman tetap diperiksa di dalamnya. Auto suhu membutuhkan keenam DS valid dan fresh; auto THI membutuhkan seluruh enam DS dan empat RH. Ketika input yang diwajibkan tidak memenuhi syarat, relay otomatis OFF.
 

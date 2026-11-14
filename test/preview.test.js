@@ -6,11 +6,15 @@ const { spawn } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
-test('unauthenticated HTML fails closed without waiting for JavaScript', () => {
+test('unauthenticated HTML renders the dashboard shell inert and busy without waiting for JavaScript', () => {
   const shell = html.match(/<div\b[^>]*id="appShell"[^>]*>/)?.[0];
   assert.ok(shell);
-  assert.match(shell, /\bhidden\b/);
+  assert.doesNotMatch(shell, /\bhidden\b/);
   assert.match(shell, /\binert\b/);
+  assert.match(shell, /data-state="loading"/);
+  assert.match(shell, /aria-busy="true"/);
+  assert.doesNotMatch(html, /session-card|Menyiapkan ruang kendali/);
+  for (const id of ['btnAuto', 'btnManual', 'btnSprayOn', 'btnSprayOff']) assert.match(html, new RegExp(`id="${id}"[^>]*disabled`));
   assert.match(html, /<main\b[^>]*id="authPanel"/);
   const login = html.match(/<main\b[^>]*id="authPanel"[^>]*>/)?.[0];
   assert.match(login, /\bhidden\b/);
@@ -44,8 +48,9 @@ test('redesigned page has unique IDs and retains core control elements', () => {
   }
 });
 
-test('overview puts relay and mode before climate summaries and keeps sensor grids inside a closed dialog', () => {
-  assert.ok(html.indexOf('class="grid command-grid"') < html.indexOf('class="grid summary-grid"'));
+test('overview shows device state and climate metrics before controls and keeps sensor grids inside a closed dialog', () => {
+  assert.ok(html.indexOf('class="grid summary-grid"') < html.indexOf('class="grid insights-grid"'));
+  assert.ok(html.indexOf('id="sprinklerState"') < html.indexOf('id="btnAuto"'));
   const dialog = html.match(/<dialog\b[^>]*id="sensorDialog"[^>]*>([\s\S]*?)<\/dialog>/);
   assert.ok(dialog);
   assert.doesNotMatch(dialog[0].split('>')[0], /\bopen\b/);
@@ -66,13 +71,15 @@ test('sidebar starts closed and inert, with an accessible toggle', () => {
   assert.match(html, /id="menuBtn"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
 });
 
-test('overview welcomes the signed-in account without changing the dynamic greeting or barn banner', () => {
+test('overview greets the signed-in account below the brand lockup and keeps the dynamic name', () => {
   const heading = html.match(/<section class="page-heading brand-heading" data-page="dash">([\s\S]*?)<\/section>/)?.[1];
   assert.ok(heading);
-  assert.match(heading, /<h1\b[^>]*>[^<]*<\/h1>[\s\S]*<h2\b[^>]*>[^<]*<span id="greetingName">[^<]*<\/span>/);
+  assert.match(heading, /<h1\b[^>]*>Halo, <span id="greetingName">[^<]*<\/span>\.<\/h1>/);
   assert.match(heading, /<p class="welcome">/);
-  assert.match(heading, /id="clock"/);
-  assert.match(html, /<div class="hero-copy"><h2>Kandang A<\/h2><\/div>/);
+  const top = html.match(/<header class="topbar">[\s\S]*?<\/header>/)?.[0];
+  assert.match(top, /COSTMOSYS/);
+  assert.ok(html.indexOf('<header class="topbar">') < html.indexOf('id="greetingName"'));
+  assert.match(html, /id="clock"/);
 });
 
 test('threshold summaries start hidden with no hard-coded default values', () => {
@@ -80,11 +87,11 @@ test('threshold summaries start hidden with no hard-coded default values', () =>
   assert.match(html, /<div class="mini-stats" data-threshold-basis="thi" hidden><div>[^<]* <b id="thiThresholdLabel">—<\/b>/);
 });
 
-test('local illustration is self-contained and contains no script or remote resource', () => {
-  const svg = fs.readFileSync(path.join(root, 'assets/farm-scene.svg'), 'utf8');
-  assert.match(svg, /<svg /);
-  assert.doesNotMatch(svg, /<script\b|<foreignObject\b|(?:href|src)\s*=\s*["']https?:/i);
-  assert.match(html, /src="assets\/farm-scene.svg\?v=42"/);
+test('interface ships only the incumbent local illustration and no remote fonts, scripts or stylesheets', () => {
+  assert.deepEqual([...html.matchAll(/<img\b[^>]*src="([^"]+)"/g)].map(m => m[1].split('?')[0]), ['assets/farm-scene.svg', 'assets/farm-scene.svg']);
+  assert.doesNotMatch(html, /(?:src|href)="https?:\/\//);
+  const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
+  assert.doesNotMatch(css, /@import|url\(\s*["']?https?:|fonts\.googleapis/);
 });
 
 test('dashboard keeps focus ring, reduced motion, snapshot labels and versioned release assets', () => {
@@ -96,10 +103,7 @@ test('dashboard keeps focus ring, reduced motion, snapshot labels and versioned 
   assert.match(html, /Titik tertinggi/);
   assert.match(html, /Min\/maks antar titik · pembacaan terkini/);
   assert.doesNotMatch(html, /Kenali iklimnya|MINDFUL CARE|greeting-leaf/);
-  const hero = html.match(/<section class="farm-hero"[\s\S]*?<\/section>/)?.[0];
-  assert.match(hero, /Kandang A/);
-  assert.doesNotMatch(hero,/SISTEM \/ 01|ESP32|relay|Lihat titik sensor|hero-kicker/);
-  assert.doesNotMatch(hero, /id="heroHealth"|data-sensors=/);
+  assert.match(html, /Kandang A/);
   for (const url of [...html.matchAll(/(?:src|href)="((?:js|css)\/[^\"]+)"/g)].map(m => m[1])) {
     assert.match(url, /\?v=\d+$/, `unversioned asset: ${url}`);
   }
@@ -154,16 +158,16 @@ test('current account has a read-only card above the account directory in the sa
   assert.match(admin, /syncCurrentAccount\(\);/);
 });
 
-test('configuration precedes a full-width chart with three labelled responsive control groups', () => {
-  const insights = html.slice(html.indexOf('<section class="grid insights-grid"'), html.indexOf('<section class="page-heading" data-page="log"'));
-  assert.ok(insights.indexOf('class="card control-card"') < insights.indexOf('class="card chart-card"'));
-  assert.doesNotMatch(insights, /grid-2/);
-  assert.equal((insights.match(/class="control-section(?: protection-section)?"/g) || []).length, 3);
+test('settings keep three labelled control groups and a save action, with the chart outside the settings section', () => {
+  const settings = html.slice(html.indexOf('<section class="settings-section"'), html.indexOf('<section class="page-heading" data-page="log"'));
+  assert.ok(html.indexOf('id="chart"') < html.indexOf('<section class="settings-section"'));
+  assert.doesNotMatch(settings, /id="chart"/);
+  assert.equal((settings.match(/class="control-section(?: protection-section)?"/g) || []).length, 3);
   for (const id of ['basisTitle', 'sourceTitle', 'protectionTitle']) {
-    assert.match(insights, new RegExp(`aria-labelledby="${id}"`));
-    assert.match(insights, new RegExp(`<h\\d id="${id}">`));
+    assert.match(settings, new RegExp(`aria-labelledby="${id}"`));
+    assert.match(settings, new RegExp(`<h\\d id="${id}"`));
   }
-  assert.match(insights, /class="control-actions"[\s\S]*id="btnSaveCfg"/);
+  assert.match(settings, /class="control-actions"[\s\S]*id="btnSaveCfg"/);
 });
 
 test('preview HTTP server serves only runtime assets and refuses writes/private paths', async t => {
@@ -185,7 +189,7 @@ test('preview HTTP server serves only runtime assets and refuses writes/private 
   const page = await fetch(origin);
   assert.equal(page.status, 200);
   assert.equal(page.headers.get('cache-control'), 'no-store');
-  assert.match(await page.text(), /id="appShell" class="app-shell" hidden inert/);
+  assert.match(await page.text(), /id="appShell" class="app-shell" data-state="loading" aria-busy="true" inert/);
   assert.equal((await fetch(origin + '/assets/farm-scene.svg')).status, 200);
   assert.equal((await fetch(origin + '/js/app.js?v=42')).status, 200);
   const head = await fetch(origin + '/index.html', { method: 'HEAD' });

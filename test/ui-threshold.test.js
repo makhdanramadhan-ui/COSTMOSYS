@@ -32,7 +32,7 @@ function setup(basis = 'temperature') {
   $('chartMetric').value = 'temperature';
   $('showAvg').checked = true;
   const saved = C.normalize({ controlBasis: basis, profiles: {
-    temperature: { threshold: 31.5, hysteresis: 1 }, thi: { threshold: 79.5, hysteresis: 2 } } });
+    temperature: { threshold: 31.5 }, thi: { threshold: 79.5 } } });
   const context = vm.createContext({ $, window: { devicePixelRatio: 1 }, appliedCfg: saved, controlLoaded: true, SCSTelemetry: T,
     sensorView: view, temps: view.s, humidities: view.h, telemetry: raw,
     document: { documentElement: {}, querySelectorAll: () => wrappers },
@@ -119,4 +119,28 @@ test('chart draws a user threshold only for the saved basis, never RH or inactiv
     ui.context.controlLoaded = false; ui.$('chartMetric').value = basis; ui.draw();
     assert.equal(ui.labels.some(label => /\d (THI)$|\d°C$/.test(label)), false);
   }
+});
+
+test('temperature display bands use fixed approach width without changing policy and hide unknown markers', () => {
+  const ui = setup();
+  for (const [value, zone] of [[30.49, 'ok'], [30.5, 'warn'], [30.51, 'warn'], [31.49, 'warn'], [31.5, 'hot']]) {
+    ui.context.placeZones(value, true);
+    assert.equal(ui.$('zoneTemp').dataset.zone, zone);
+    assert.equal(ui.$('zoneTemp').querySelector('.ruler-mark').hidden, false);
+  }
+  ui.context.placeZones(31, false);
+  assert.equal(ui.$('zoneTemp').dataset.zone, '');
+  assert.equal(ui.$('zoneTemp').querySelector('.ruler-mark').hidden, true);
+  ui.context.controlLoaded = false;
+  ui.context.placeZones(31, true);
+  assert.equal(ui.$('zoneTemp').dataset.state, 'off');
+  assert.equal(ui.$('zoneOkText').textContent, 'Belum aktif');
+  const partial = T.view({ ...ui.context.telemetry, validMask: 31, validCount: 5 });
+  Object.assign(ui.context, { controlLoaded: true, sensorView: partial, temps: partial.s, humidities: partial.h });
+  ui.render();
+  assert.equal(ui.$('avgStatus').className, 'status-pill neutral');
+  const policy = JSON.stringify(ui.context.appliedCfg);
+  ui.context.placeZones(31.5, true);
+  assert.equal(ui.$('zoneTemp').dataset.zone, 'hot');
+  assert.equal(JSON.stringify(ui.context.appliedCfg), policy);
 });

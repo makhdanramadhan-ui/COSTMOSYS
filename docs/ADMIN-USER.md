@@ -13,7 +13,7 @@
 | Izin | Yang diperbolehkan |
 | --- | --- |
 | Monitoring | Suhu, kelembapan, THI, status sprinkler, tren, riwayat, dan aktivitas |
-| Pengaturan | Dasar kontrol, threshold, hysteresis, durasi maksimal, cooldown, dan jadwal; bukan ubah mode/manual ON/OFF |
+| Pengaturan | Dasar kontrol, threshold, batas siklus harian, durasi maksimal, cooldown, dan jadwal; bukan ubah mode/manual ON/OFF |
 | Operasi sprinkler | Ubah mode otomatis/manual dan manual ON/OFF; bukan ubah threshold/jadwal |
 
 Pengaturan/Operasi menyertakan Monitoring agar pengguna dapat melihat keadaan kandang. User dengan ketiga izin **bukan Admin** dan tidak dapat membuat akun atau mengubah izin siapa pun. Admin memperoleh semua izin. Rilis ini mengelola **satu kandang, Kandang A**, bukan sistem multi-kandang.

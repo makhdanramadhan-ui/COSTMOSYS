@@ -11,17 +11,20 @@ test('tetap MATI di bawah threshold', () => {
   assert.equal(SCS.decideSprinkler(29.9, false, { threshold: 30.0, hysteresis: 1.0 }), 'stay');
 });
 
-test('keputusan MATI saat avg <= threshold - hysteresis (dari nyala)', () => {
-  assert.equal(SCS.decideSprinkler(29.0, true, { threshold: 30.0, hysteresis: 1.0 }), 'off');
+test('threshold hanya syarat start, tidak mematikan siklus berjalan', () => {
+  assert.equal(SCS.decideSprinkler(29.0, true, { threshold: 30.0 }), 'stay');
 });
 
-test('tetap NYALA di dalam pita hysteresis (anti flapping relay)', () => {
-  assert.equal(SCS.decideSprinkler(29.5, true, { threshold: 30.0, hysteresis: 1.0 }), 'stay');
+test('siklus berjalan tetap NYALA tanpa batas hysteresis', () => {
+  assert.equal(SCS.decideSprinkler(29.5, true, { threshold: 30.0 }), 'stay');
+  assert.equal(SCS.decideSprinkler(20.0, true, { threshold: 30.0 }), 'stay');
 });
 
-test('klasifikasi status kandang', () => {
+test('klasifikasi status kandang memakai pita pendekatan 1 satuan', () => {
   assert.equal(SCS.classify(28.0, { threshold: 30.0 }), 'normal');
-  assert.equal(SCS.classify(30.0, { threshold: 30.0 }), 'waspada');
+  assert.equal(SCS.classify(29.0, { threshold: 30.0 }), 'waspada');
+  assert.equal(SCS.classify(29.9, { threshold: 30.0 }), 'waspada');
+  assert.equal(SCS.classify(30.0, { threshold: 30.0 }), 'bahaya');
   assert.equal(SCS.classify(31.2, { threshold: 30.0 }), 'bahaya');
 });
 
@@ -65,17 +68,17 @@ test('durasi nol berarti jadwal mati', () => {
 });
 
 test('mode eksklusif: threshold abaikan jadwal', () => {
-  const cfg = { threshold: 30.0, hysteresis: 1.0, autoSrc: 'threshold' };
+  const cfg = { threshold: 30.0, autoSrc: 'threshold' };
   assert.equal(SCS.decideAuto(31.5, false, cfg, true), 'on');
   assert.equal(SCS.decideAuto(29.9, false, cfg, true), 'stay');
-  assert.equal(SCS.decideAuto(29.0, true, cfg, true), 'off');
+  assert.equal(SCS.decideAuto(29.0, true, cfg, true), 'stay');
 });
 
 test('jadwal adalah jendela waktu, tetap mengikuti threshold', () => {
-  const cfg = { threshold: 30.0, hysteresis: 1.0, autoSrc: 'schedule' };
+  const cfg = { threshold: 30.0, autoSrc: 'schedule' };
   assert.equal(SCS.decideAuto(25.0, false, cfg, true), 'stay');
   assert.equal(SCS.decideAuto(30.0, false, cfg, true), 'on');
-  assert.equal(SCS.decideAuto(29.0, true, cfg, true), 'off');
+  assert.equal(SCS.decideAuto(29.0, true, cfg, true), 'stay');
   assert.equal(SCS.decideAuto(35.0, true, cfg, false), 'off');
   assert.equal(SCS.decideAuto(35.0, true, cfg, true), 'stay');
 });

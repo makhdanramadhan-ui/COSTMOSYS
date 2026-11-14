@@ -27,12 +27,14 @@ Kanan **v3.1** menambah kontrol Suhu/THI dan jadwal bersyarat. **Upload ulang ka
 | DHT pertama | GPIO19 → `h1`,`d1` / DHT1 | GPIO19 → `h3`,`d3` / DHT3 |
 | DHT kedua | GPIO25 → `h2`,`d2` / DHT2 | GPIO25 → `h4`,`d4` / DHT4 |
 | SSR IN | GPIO23 + GND kanan | Tidak dipasang |
+| LCD I2C 16x2 (SDA/SCL) | GPIO21 (SDA), GPIO22 (SCL) | Tidak dipasang |
 
 - **GPIO20 tidak ada pada ESP32 klasik**; pin 19/25 telah disepakati. Nomor GPIO boleh sama karena board terpisah.
 - VCC sensor **3V3**, GND lokal. Tidak perlu kabel data/common ground antar-ESP untuk ESP-NOW. Ground sensor dan SSR tetap common dengan board lokalnya.
 - DS menggunakan 3-kabel, bukan parasite power. **Satu pull-up fisik 4,7 kΩ ke 3V3 per DATA DS**: 3 resistor per sisi, bukan satu resistor bersama.
 - DATA DHT menggunakan pull-up **4,7–10 kΩ ke 3V3** jika belum terpasang pada modul. Jangan mengandalkan urutan pin berdasarkan warna; periksa label modul/datasheet.
-- GPIO21/22/26 tidak digunakan FINAL dan tersedia untuk rencana INMP441; kode mic belum ada.
+- GPIO26 tidak digunakan FINAL dan tersedia untuk rencana INMP441; kode mic belum ada. GPIO21 (SDA) dan GPIO22 (SCL) dipakai opsional untuk LCD I2C 16x2 (probe alamat 0x27/0x3F).
+- **LCD I2C 16x2 (opsional, kanan saja):** tampilkan rata-rata suhu DS dan RH pada baris 1 (`T:..C RH:..%`) dan THI pada baris 2 (`THI:..`); nilai invalid/stale/belum lengkap tampil `--`. Bila backpack I2C memakai pull-up 5 V pada SDA/SCL, wajib pakai level shifter atau pindahkan pull-up ke 3V3; jangan pernah memberi 5 V ke pin GPIO ESP32. Jika LCD tidak terpasang, sensor, kontrol, dan jaringan tetap berjalan normal.
 - Jack audio boleh dipakai dengan mapping VCC/GND/DATA konsisten. **Cabut daya sebelum memasang/melepas** karena kontak TRS dapat short sesaat. Nomor DS mengikuti jack/GPIO, bukan identitas probe. Rediscovery bisa perlu hingga 60 detik.
 - DHT diletakkan dekat titik pengukuran, berventilasi, teduh dan terlindung hujan/sprinkler. Uji kabel pendek terlebih dahulu; bukan kabel DHT/I2C sepanjang 15 m antar-ESP.
 - **220 V tidak masuk GPIO**. Pastikan SSR/solenoid sesuai, isolasi dan box/proteksi diperiksa orang kompeten. Uji pertama **tanpa beban AC**; sesuaikan `SSR_ACTIVE_HIGH` dengan modul.
@@ -62,6 +64,7 @@ Arduino IDE board **ESP32 Dev Module**:
 - DallasTemperature — Miles Burton.
 - DHT sensor library — Adafruit, beserta Adafruit Unified Sensor.
 - ArduinoJson **versi 7**, kanan saja.
+- LiquidCrystal_I2C — kanan saja, untuk LCD I2C 16x2 opsional.
 
 Konfigurasi `WIFI_SSID`, `WIFI_PASSWORD`, `DATABASE_SECRET` kanan dipertahankan dari sketch sebelumnya; periksa/isi secara lokal. Jangan menaruh secret pada web atau commit publik. Bila ingin konfigurasi di luar repo, salin **seluruh folder sketch** ke lokasi kerja lokal.
 

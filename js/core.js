@@ -4,9 +4,8 @@
   else root.SCS = Object.assign(root.SCS || {}, api);
 })(typeof self !== 'undefined' ? self : globalThis, () => {
   function decideSprinkler(avg, on, cfg) {
-    if (!on && avg >= cfg.threshold) return 'on';
-    if (on && avg <= cfg.threshold - cfg.hysteresis) return 'off';
-    return 'stay';
+    if (on) return 'stay';
+    return avg >= cfg.threshold ? 'on' : 'stay';
   }
   function autoSrcOf(cfg) {
     if (cfg && (cfg.autoSrc === 'schedule' || cfg.autoSrc === 'threshold')) return cfg.autoSrc;
@@ -25,13 +24,17 @@
   function decideAutomatic(value, on, cfg, state) {
     if (!state.complete || typeof value !== 'number' || !Number.isFinite(value)) return 'off';
     if (autoSrcOf(cfg) === 'schedule' && !state.scheduleActive) return 'off';
-    if (on && state.runSeconds >= cfg.maxDuration) return 'off';
-    if (!on && state.offSeconds < cfg.cooldown) return 'stay';
-    return decideSprinkler(value, on, cfg);
+    if (on) return state.runSeconds >= cfg.maxDuration ? 'off' : 'stay';
+    if (state.clockValid !== true) return 'stay';
+    if (!Number.isInteger(state.cyclesToday) || state.cyclesToday < 0) return 'stay';
+    if (!Number.isFinite(state.offSeconds) || state.offSeconds < 0) return 'stay';
+    if (state.cyclesToday >= (cfg.maxCyclesPerDay || 3)) return 'stay';
+    if (state.offSeconds < cfg.cooldown) return 'stay';
+    return value >= cfg.threshold ? 'on' : 'stay';
   }
   function classify(avg, cfg) {
-    if (avg >= cfg.threshold + 1) return 'bahaya';
-    if (avg >= cfg.threshold) return 'waspada';
+    if (avg >= cfg.threshold) return 'bahaya';
+    if (avg >= cfg.threshold - 1) return 'waspada';
     return 'normal';
   }
   function avgOf(values) {

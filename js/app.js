@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const SENSOR_NAMES = ['Titik 1 • Depan', 'Titik 2 • Depan', 'Titik 3 • Tengah', 'Titik 4 • Tengah', 'Titik 5 • Belakang', 'Titik 6 • Belakang'];
-const COLORS = ['#b64c26','#a26a00','#167866','#3f70c4','#9563bb','#bb507b'];
-const AVG_COLOR = '#167866';
+const COLORS = ['#bd6b3a','#9b831e','#328b70','#4a86ae','#9272bd','#b96787'];
+const PAGE_TITLES = { dash:'Overview', log:'Riwayat sensor', event:'Aktivitas sprinkler', herd:'Aktivitas Sapi', admin:'Dashboard Admin' };
 
 let temps = Array(6).fill(null);
 let humidities = Array(4).fill(null);
@@ -9,8 +9,7 @@ let telemetry = null, sensorView = SCSTelemetry.view(null), transportConnected =
 const fmtValue = (value, digits = 1) => SCSTelemetry.finite(value) ? value.toFixed(digits) : '—';
 let lastUpdate = null;
 let sprinklerOn = false;
-let sprayStart = null;
-let lastSprayEnd = 0;
+let herdDays = null, herdResolved = false, herdFailed = false, herdView = SCSHerd.view(null), selectedHerdDay = null, telemetryResolved = false;
 let history = [];
 let logs = [];
 let events = [];
@@ -25,24 +24,36 @@ let appliedCfg = SCSControl.normalize(CFG), settingsDirty = false, savingSetting
 const basisName = cfg => cfg.controlBasis === 'thi' ? 'THI' : 'Suhu';
 const basisUnit = cfg => cfg.controlBasis === 'thi' ? ' THI' : ' °C';
 const metricValue = (view,cfg) => cfg.controlBasis === 'thi' ? view.thi : view.avg;
-const firmwareReady = () => sensorView.online && sensorView.controlPolicyVersion === 2;
+const firmwareReady = () => sensorView.online && SCSControl.canApplyV3(telemetry, window.SCSFirebase?.now() || Date.now());
 const profileOf = basis => appliedCfg.profiles[basis];
 const isAppliedBasis = basis => controlLoaded && appliedCfg.controlBasis === basis;
-function markSettingsDirty(){ settingsDirty=true; saveCfg(); $('settingsStatus').textContent='Perubahan belum dikirim. Klik Simpan Pengaturan untuk menerapkan.'; }
+function markSettingsDirty(){ settingsDirty=true; saveCfg(); $('settingsStatus').textContent='Belum disimpan. Pilih Simpan pengaturan untuk menerapkan.'; }
 
-function curTheme(){ return localStorage.getItem('scs_theme') || 'light'; }
+let themeFrame = null;
+function curTheme(){ return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
 function applyTheme(t){
+  cancelAnimationFrame(themeFrame);
+  const changed = curTheme() !== t;
   document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
-  localStorage.setItem('scs_theme', document.documentElement.dataset.theme);
-  const light = document.documentElement.dataset.theme === 'light';
+  try { localStorage.setItem('scs_theme', curTheme()); } catch {}
+  const light = curTheme() === 'light';
   const b = $('themeBtn');
-  if (b){ b.innerHTML = `<svg class="icon" aria-hidden="true"><use href="#i-${light ? 'moon' : 'sun'}"/></svg>`; b.title = light ? 'Gunakan tema gelap' : 'Gunakan tema terang'; b.setAttribute('aria-label', b.title); }
-  if (typeof drawChart === 'function') drawChart();
+  if (b){ b.innerHTML = `<svg class="icon" aria-hidden="true"><use href="#i-${light ? 'moon' : 'sun'}"/></svg>`; b.title = light ? 'Gunakan tema gelap' : 'Gunakan tema terang'; b.setAttribute('aria-label', b.title); b.setAttribute('aria-pressed', String(!light)); }
+  const end = performance.now() + (changed ? reducedMotion() ? 120 : 240 : 0);
+  function paint(now){
+    drawChart();
+    themeFrame = now < end ? requestAnimationFrame(paint) : null;
+  }
+  paint(performance.now());
 }
 function chartTheme(){
-  return document.documentElement.dataset.theme === 'light'
-    ? { grid: '#cbd3de', txt: '#565e6c', empty: '#565e6c', threshold: '#a55b16', thi: '#14695b' }
-    : { grid: '#3b4658', txt: '#a9b5c6', empty: '#a9b5c6', threshold: '#f5cc91', thi: '#8de1cd' };
+  return {
+    grid: getComputedStyle($('chart').closest('.card')).borderColor,
+    txt: getComputedStyle($('chartTitle').nextElementSibling).color,
+    threshold: getComputedStyle(document.documentElement).getPropertyValue('--threshold-line').trim(),
+    thi: getComputedStyle($('thiValue').parentElement).color,
+    avg: getComputedStyle($('avgTemp').parentElement).color
+  };
 }
 
 function tickClock(){
@@ -77,7 +88,7 @@ function renderLegend(){
   if ($('chartMetric').value === 'thi'){ leg.textContent='THI agregat · 6 DS + 4 DHT'; return; }
   for (let i = 0; i < (rh ? 4 : 6); i++){
     const s = document.createElement('span');
-    s.innerHTML = `<i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[i]}"></i> ${rh ? 'DHT' : 'DS'}${i+1}`;
+    s.innerHTML = `<i class="swatch" style="background:${COLORS[i]}"></i> ${rh ? 'DHT' : 'DS'}${i+1}`;
     leg.appendChild(s);
   }
 }
@@ -93,13 +104,54 @@ function buildLogHead(count){
   tr.innerHTML = h;
 }
 function tempColor(t){
-  const threshold=profileOf('temperature').threshold;
+  const profile=profileOf('temperature');
   const style=getComputedStyle(document.documentElement);
   if (!isAppliedBasis('temperature')) return style.getPropertyValue('--txt');
-  if (t >= threshold + 1) return style.getPropertyValue('--negative-txt');
-  if (t >= threshold) return style.getPropertyValue('--warning-txt');
-  if (t >= threshold - 1) return style.getPropertyValue('--positive-txt');
-  return style.getPropertyValue('--cool-txt');
+  const zone=zoneOf(t,profile);
+  return style.getPropertyValue(zone==='hot' ? '--negative-txt' : zone==='warn' ? '--warning-txt' : '--positive-txt');
+}
+function zoneOf(value, profile){
+  if (!SCSTelemetry.finite(value)) return null;
+  if (value >= profile.threshold) return 'hot';
+  if (value >= profile.threshold - 1) return 'warn';
+  return 'ok';
+}
+function placeZones(avg, complete){
+  const box = $('zoneTemp'), profile = profileOf('temperature');
+  const on = isAppliedBasis('temperature');
+  const mark = box.querySelector('.ruler-mark');
+  box.dataset.state = on ? 'on' : 'off';
+  const zone = on && complete ? zoneOf(avg, profile) : null;
+  box.dataset.zone = zone || '';
+  const f = v => v.toFixed(1);
+  const low = profile.threshold - 1;
+  const lo = Math.floor(Math.min(24, low - 4)), hi = Math.ceil(Math.max(38, profile.threshold + 4));
+  const at = v => Math.min(100, Math.max(0, (v - lo) / (hi - lo) * 100));
+  const ok = box.querySelector('.zone-ok'), warn = box.querySelector('.zone-warn'), hot = box.querySelector('.zone-hot');
+  if (on){
+    ok.style.width = at(low) + '%';
+    warn.style.left = at(low) + '%'; warn.style.width = (at(profile.threshold) - at(low)) + '%';
+    hot.style.left = at(profile.threshold) + '%'; hot.style.width = (100 - at(profile.threshold)) + '%';
+  }
+  for (const [id, text] of [['zoneOkText', on ? `< ${f(low)} °C` : 'Belum aktif'], ['zoneWarnText', on ? `${f(low)} ≤ T < ${f(profile.threshold)} °C` : 'Belum aktif'], ['zoneHotText', on ? `≥ ${f(profile.threshold)} °C` : 'Belum aktif']]) $(id).textContent = text;
+  $('zoneNote').textContent = on
+    ? `Oranye menandai 1 °C sebelum threshold ${f(profile.threshold)} °C, hanya untuk tampilan. Warna bukan diagnosis sapi, batas mati, atau status sprinkler. Threshold hanya memulai siklus; durasi, cooldown, kuota, sensor, dan jadwal dijalankan perangkat.`
+    : 'Indikator threshold suhu belum aktif. Pilih dasar Suhu lalu simpan untuk melihat indikator. Pembacaan sensor tetap tersedia.';
+  for (const name of ['ok','warn','hot']) box.querySelector('.zone-legend .zone-' + name).classList.toggle('active', zone === name);
+  mark.hidden = !zone;
+  if (!mark.hidden) mark.style.left = at(avg) + '%';
+  $('zoneLo').textContent = String(lo); $('zoneHi').textContent = String(hi);
+}
+function placeRuler(id, value, lo, hi, threshold, spanLow, spanHigh){
+  const box = $(id), mark = box.querySelector('.ruler-mark'), thr = box.querySelector('.ruler-thr'), span = box.querySelector('.ruler-span');
+  const at = v => Math.min(100, Math.max(0, (v - lo) / (hi - lo) * 100));
+  mark.hidden = !SCSTelemetry.finite(value);
+  if (!mark.hidden) mark.style.left = at(value) + '%';
+  if (thr){ thr.hidden = !SCSTelemetry.finite(threshold); if (!thr.hidden) thr.style.left = at(threshold) + '%'; }
+  if (span){
+    span.hidden = !(SCSTelemetry.finite(spanLow) && SCSTelemetry.finite(spanHigh));
+    if (!span.hidden){ span.style.left = at(spanLow) + '%'; span.style.width = Math.max(1.5, at(spanHigh) - at(spanLow)) + '%'; }
+  }
 }
 function renderSensors(){
   const tempProfile=profileOf('temperature'), thiProfile=profileOf('thi');
@@ -124,9 +176,9 @@ function renderSensors(){
     bar.style.width = pct+'%'; bar.style.background = tempColor(t);
     const st = el.querySelector('.s-state');
     if (!temperatureActive){ st.textContent = 'TERBACA · MONITORING'; st.className = 's-state off'; }
-    else if (t >= tempProfile.threshold){ st.textContent = 'PANAS'; st.className = 's-state hot'; }
-    else if (t >= tempProfile.threshold - tempProfile.hysteresis){ st.textContent = 'WASPADA'; st.className = 's-state warn'; }
-    else { st.textContent = 'NORMAL'; st.className = 's-state ok'; }
+    else if (zoneOf(t, tempProfile) === 'hot'){ st.textContent = 'THRESHOLD TERCAPAI'; st.className = 's-state hot'; }
+    else if (zoneOf(t, tempProfile) === 'warn'){ st.textContent = 'MENDEKATI THRESHOLD'; st.className = 's-state warn'; }
+    else { st.textContent = 'DI BAWAH RENTANG PENDEKATAN'; st.className = 's-state ok'; }
   });
   const avg = sensorView.avg;
   $('avgTemp').textContent = fmtValue(avg);
@@ -136,10 +188,10 @@ function renderSensors(){
   const pill = $('avgStatus');
   if (!SCSTelemetry.finite(avg)){ pill.textContent='DATA BELUM TERSEDIA'; pill.className='status-pill neutral'; }
   else if (!temperatureActive){ pill.textContent=sensorView.complete ? 'MONITORING SUHU' : 'DATA SUHU PARSIAL · MONITORING'; pill.className='status-pill neutral'; }
-  else if (!sensorView.complete){ pill.textContent='DATA PARSIAL · AUTO SUHU DIBLOKIR'; pill.className='status-pill waspada'; }
-  else if (avg >= tempProfile.threshold + 1){ pill.textContent='SUHU TINGGI · DI ATAS THRESHOLD'; pill.className='status-pill bahaya'; }
-  else if (avg >= tempProfile.threshold){ pill.textContent='WASPADA — THRESHOLD TERSENTUH'; pill.className='status-pill waspada'; }
-  else { pill.textContent='DI BAWAH THRESHOLD SUHU'; pill.className='status-pill normal'; }
+  else if (!sensorView.complete){ pill.textContent='DATA PARSIAL · AUTO SUHU DIBLOKIR'; pill.className='status-pill neutral'; }
+  else if (zoneOf(avg, tempProfile) === 'hot'){ pill.textContent='THRESHOLD SUHU TERCAPAI'; pill.className='status-pill bahaya'; }
+  else if (zoneOf(avg, tempProfile) === 'warn'){ pill.textContent='MENDEKATI THRESHOLD'; pill.className='status-pill waspada'; }
+  else { pill.textContent='DI BAWAH RENTANG PENDEKATAN'; pill.className='status-pill normal'; }
   $('dsSummary').textContent = `${sensorView.validCount}/6 DS valid · rata-rata ${sensorView.complete ? 'lengkap' : 'parsial'}${sensorView.legacy ? ' · firmware lama' : ''}`;
   $('sensorTitle').textContent = `6 titik suhu · ${sensorView.validCount} valid`;
   $('noSensor').style.display = telemetry && !shown.length ? '' : 'none';
@@ -172,14 +224,18 @@ function renderSensors(){
   for (const [id, name, online] of [['rightNode','Perangkat utama',sensorView.online],['leftNode','Sensor tambahan',sensorView.leftOnline]]){
     $(id).textContent = `${name} · ${online ? 'online' : 'belum terhubung'}`; $(id).classList.toggle('online', online);
   }
+  placeZones(avg, sensorView.complete);
+  placeRuler('rulerRh', sensorView.humidityAvg, 20, 100, null, goodRH.length ? Math.min(...goodRH) : null, goodRH.length ? Math.max(...goodRH) : null);
+  placeRuler('rulerThi', sensorView.thi, 60, 95, thiActive ? thiProfile.threshold : null, null, null);
   return avg;
 }
 
 function refreshTelemetry(){
   sensorView = SCSTelemetry.view(telemetry, window.SCSFirebase?.now() || Date.now());
+  sprinklerOn = sensorView.ssr === 1;
   temps = sensorView.s; humidities = sensorView.h;
   renderSensors(); renderSprinkler();
-  setConn(fbConnected ? (!transportConnected ? 'err' : sensorView.online ? 'live' : 'offline') : 'login');
+  setConn(!authResolved ? 'sim' : !fbConnected ? 'login' : hasAccess('monitor') && !telemetryResolved ? 'sim' : !transportConnected ? 'err' : sensorView.online ? 'live' : 'offline');
   $('btnSprayOn').disabled = $('btnSprayOff').disabled = !hasAccess('operate') || CFG.mode !== 'manual' || !controlLoaded || !fbConnected || !sensorView.online || !transportConnected;
   $('btnManual').disabled = !hasAccess('operate') || !fbConnected || !controlLoaded || !transportConnected || !sensorView.online || savingSettings;
   $('btnAuto').disabled = $('btnManual').disabled || !firmwareReady();
@@ -187,7 +243,149 @@ function refreshTelemetry(){
   $('firmwareNotice').hidden=firmwareReady();
   $('btnSaveCfg').disabled = !hasAccess('settings') || CFG.mode!=='auto' || !fbConnected || !controlLoaded || !transportConnected || !firmwareReady() || savingSettings;
   $('btnLogNow').disabled = !hasAccess('monitor') || !sensorView.online || !fbConnected;
+  const locked = $('btnSaveCfg').disabled;
+  document.querySelectorAll('.control-card input, .control-card button:not(#btnSaveCfg)').forEach(el => { el.disabled = locked || el.id === 'btnAddSched' && schedSlots().length >= 6; });
+  renderConditions();
 }
+
+const NUM_ID = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
+const formatDuration = seconds => {
+  const s = Math.round(seconds);
+  if (s >= 3600) return `${Math.floor(s / 3600)} j ${Math.floor(s % 3600 / 60)} m`;
+  if (s >= 60) return `${Math.floor(s / 60)} m ${s % 60} d`;
+  return `${s} d`;
+};
+const formatAge = ms => ms < 0 ? 'waktu umpan lebih maju dari server' : ms < 90000 ? 'baru saja' : ms < 5400000 ? `${Math.round(ms / 60000)} menit lalu` : ms < 172800000 ? `${Math.round(ms / 3600000)} jam lalu` : `${Math.round(ms / 86400000)} hari lalu`;
+const formatStamp = ts => new Date(ts).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\./g, ':') + ' WIB';
+const ZONE_LABELS = { standingS: 'Berdiri', lyingS: 'Berbaring', mixedS: 'Campuran', partialS: 'Sebagian teramati', unobservedS: 'Kurang terlihat', gapS: 'Celah antar sampel' };
+function setPill(id, text, kind){ $(id).textContent = text; $(id).className = 'status-pill ' + kind; }
+function herdState(){
+  if (!fbConnected || !hasAccess('monitor') || !herdResolved) return 'checking';
+  if (herdFailed) return 'error';
+  if (!herdView.present) return 'empty';
+  return herdView.stale ? 'stale' : 'fresh';
+}
+function latestHerdDay(){ return herdView.days.find(d => d.day === herdView.latest?.day) || null; }
+function renderConditions(){
+  const synthetic = !!window.SCS_SYNTHETIC;
+  $('condSynthetic').hidden = !synthetic;
+  const view = sensorView, ready = fbConnected && hasAccess('monitor');
+  const basis = appliedCfg.controlBasis, profile = profileOf(basis);
+  const value = basis === 'thi' ? view.thi : view.avg, complete = basis === 'thi' ? view.thiComplete : view.complete;
+  const parts = [];
+  if (SCSTelemetry.finite(view.avg)) parts.push(`Suhu rata-rata ${view.avg.toFixed(1)} °C dari ${view.validCount}/6 titik DS`);
+  if (SCSTelemetry.finite(view.thi)) parts.push(`THI agregat ${view.thi.toFixed(1)}`);
+  if (!ready || !view.online || !parts.length){
+    setPill('condHeatPill', ready && telemetryResolved ? 'DATA TIDAK TERKINI' : 'MENUNGGU DATA', 'neutral');
+    $('condHeatDetail').textContent = ready && telemetryResolved ? 'Tidak ada pembacaan sensor yang terkini. Paparan panas tidak dinilai dari nilai lama.' : 'Menunggu pembacaan sensor pertama.';
+  } else {
+    const reached = controlLoaded && complete && SCSTelemetry.finite(value) && value >= profile.threshold;
+    const near = controlLoaded && complete && basis === 'temperature' && zoneOf(value, profile) === 'warn';
+    if (!controlLoaded) setPill('condHeatPill', 'MONITORING', 'neutral');
+    else if (!complete) setPill('condHeatPill', 'DATA PARSIAL', 'neutral');
+    else if (reached) setPill('condHeatPill', 'THRESHOLD TERCAPAI', 'bahaya');
+    else if (near) setPill('condHeatPill', 'MENDEKATI THRESHOLD', 'waspada');
+    else setPill('condHeatPill', 'DI BAWAH THRESHOLD', 'normal');
+    const limit = controlLoaded ? ` Threshold terapan ${basisName(appliedCfg)}: ${profile.threshold.toFixed(1)}${basisUnit(appliedCfg)}.` : ' Threshold belum dimuat.';
+    $('condHeatDetail').textContent = parts.join(' · ') + '.' + limit;
+  }
+  const spray = $('sprinklerText').textContent;
+  setPill('condSprayPill', ready ? spray : 'BELUM DIKETAHUI', ready && sensorView.ssr === 1 ? 'normal' : 'neutral');
+  $('condSprayDetail').textContent = ready && view.online ? `${$('cyclePhase').textContent} ${$('cycleQuota').textContent}` : 'Menunggu laporan perangkat yang terkini. Nilai lama tidak dipakai.';
+  const state = herdState(), day = latestHerdDay();
+  const link = document.querySelector('.cond-link');
+  link.disabled = !ready;
+  const pending = { checking: ['MEMERIKSA UMPAN', 'Memeriksa umpan pengamatan…'], error: ['UMPAN TIDAK TERBACA', 'Umpan pengamatan tidak dapat dibaca. Tidak ada nilai yang ditampilkan.'],
+    empty: ['BELUM ADA UMPAN', 'Belum ada pengamatan kamera yang dikirim. Kosong bukan berarti sapi tidak aktif atau kondisi normal.'] };
+  if (pending[state]){
+    for (const id of ['condPosture', 'condPerson']){ setPill(id + 'Pill', pending[state][0], 'neutral'); $(id + 'Detail').textContent = pending[state][1]; }
+    return;
+  }
+  const names = day ? Object.keys(day.zones) : [];
+  const coverage = names.map(n => day.zones[n].coveragePct);
+  const age = herdView.latest ? `terakhir diproses ${formatStamp(herdView.latest.windowEndTs)} (${formatAge(herdView.latest.ageMs)})` : '';
+  const stale = state === 'stale';
+  setPill('condPosturePill', stale ? 'UMPAN LAMA' : 'TERAMATI', 'neutral');
+  $('condPostureDetail').textContent = names.length
+    ? `${names.length} zona, cakupan pengamatan ${NUM_ID.format(Math.min(...coverage))}–${NUM_ID.format(Math.max(...coverage))}% dari ${formatDuration(day.windowS)} video yang diproses pada ${day.day}; ${age}.`
+    : `Tidak ada zona valid pada ${herdView.latest.day}; ${age}.`;
+  const known = day && day.personFrames !== null && day.samples;
+  setPill('condPersonPill', stale ? 'UMPAN LAMA' : !known ? 'TIDAK DIKETAHUI' : day.personFrames > 0 ? 'ORANG TERDETEKSI' : 'TIDAK ADA DETEKSI', 'neutral');
+  $('condPersonDetail').textContent = known
+    ? `${day.personFrames} dari ${day.samples} sampel memuat orang pada ${day.day}. ${day.personFrames > 0 ? 'Aktivitas orang dapat memengaruhi postur yang terbaca.' : 'Hasil nol bukan bukti tidak ada orang.'}`
+    : 'Jumlah sampel dengan orang tidak tersedia pada umpan ini.';
+}
+function herdZoneCard(name, zone){
+  const card = document.createElement('article');
+  card.className = 'card zone-card';
+  const title = document.createElement('h3'); title.textContent = name.replace(/_/g, ' · ');
+  const cover = document.createElement('div'); cover.className = 'coverage';
+  const bar = document.createElement('div'); bar.className = 'coverage-bar'; bar.setAttribute('aria-hidden', 'true');
+  const fill = document.createElement('i'); fill.style.width = Math.min(100, zone.coveragePct) + '%'; bar.append(fill);
+  const text = document.createElement('p');
+  const strong = document.createElement('b'); strong.textContent = NUM_ID.format(zone.coveragePct) + '%';
+  text.append(strong, `postur teramati dari ${formatDuration(zone.windowS)} yang diproses (${zone.windows} jendela)`);
+  cover.append(bar, text);
+  const list = document.createElement('dl'); list.className = 'duration-list';
+  for (const [key, label] of Object.entries(ZONE_LABELS)){
+    const dt = document.createElement('dt'); dt.textContent = label;
+    const dd = document.createElement('dd'); dd.textContent = formatDuration(zone[key]);
+    list.append(dt, dd);
+  }
+  card.append(title, cover, list);
+  const reasons = Object.entries(zone.reasonsS).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  if (reasons.length){
+    const p = document.createElement('p'); p.className = 'zone-reasons';
+    p.textContent = 'Alasan kurang terlihat: ' + reasons.map(([k, v]) => `${k.replace(/_/g, ' ')} ${formatDuration(v)}`).join(', ') + '.';
+    card.append(p);
+  }
+  return card;
+}
+function renderHerd(){
+  herdView = herdFailed ? SCSHerd.view(null) : SCSHerd.view(herdDays, window.SCSFirebase?.now() || Date.now());
+  $('herdSynthetic').hidden = !window.SCS_SYNTHETIC;
+  const state = herdState();
+  const texts = {
+    checking: ['MEMERIKSA UMPAN', 'Memeriksa umpan aktivitas…'],
+    error: ['UMPAN TIDAK TERBACA', 'Umpan aktivitas tidak dapat dibaca. Periksa koneksi atau izin akun. Tidak ada data yang ditampilkan.'],
+    empty: ['BELUM ADA UMPAN', 'Belum ada pengamatan zona dari kamera. Penerbit umpan belum aktif, sehingga halaman ini kosong. Kosong bukan berarti sapi tidak aktif atau kondisi normal.'],
+    stale: ['UMPAN LAMA', 'Pengamatan terakhir lebih tua dari 24 jam. Data di bawah adalah catatan lama, bukan kondisi sekarang.'],
+    fresh: ['UMPAN TERKINI', 'Durasi di bawah hanya mencakup rentang video yang benar-benar diproses, bukan seluruh hari.']
+  }[state];
+  setPill('herdPill', texts[0], 'neutral');
+  $('herdMessage').textContent = texts[1];
+  const live = state === 'fresh' || state === 'stale';
+  const meta = $('herdMeta'), controls = $('herdControls'), zones = $('herdZones'), select = $('herdDay');
+  meta.hidden = controls.hidden = !live;
+  zones.replaceChildren();
+  meta.replaceChildren();
+  document.querySelectorAll('.herd-quality').forEach(n => n.remove());
+  if (!live){ select.replaceChildren(); selectedHerdDay = null; return; }
+  const days = herdView.days.filter(d => Object.keys(d.zones).length).slice().reverse();
+  if (!days.some(d => d.day === selectedHerdDay)) selectedHerdDay = herdView.latest.day;
+  if (!days.some(d => d.day === selectedHerdDay) && days.length) selectedHerdDay = days[0].day;
+  select.replaceChildren(...days.map(d => { const o = document.createElement('option'); o.value = d.day; o.textContent = `${d.day} · ${d.segments} rekaman`; return o; }));
+  select.value = selectedHerdDay;
+  const day = days.find(d => d.day === selectedHerdDay);
+  const add = (label, value) => { const s = document.createElement('span'); s.append(label + ' '); const b = document.createElement('b'); b.textContent = value; s.append(b); meta.append(s); };
+  add('Terakhir diproses', `${formatStamp(herdView.latest.windowEndTs)} · ${formatAge(herdView.latest.ageMs)}`);
+  if (day) add('Rentang diproses hari ini', `${formatDuration(day.windowS)} dari ${day.segments} rekaman`);
+  const notes = [];
+  if (herdView.unknownBoundary) notes.push(`${herdView.unknownBoundary} rekaman melewati tengah malam tanpa bukti waktu, tidak dihitung`);
+  if (herdView.overlapDropped) notes.push(`${herdView.overlapDropped} jendela tumpang tindih tidak dihitung ganda`);
+  if (herdView.invalidSegments) notes.push(`${herdView.invalidSegments} rekaman tidak valid ditolak`);
+  document.querySelectorAll('.herd-quality').forEach(n => n.remove());
+  if (notes.length){
+    const details = document.createElement('details'); details.className = 'herd-quality';
+    const summary = document.createElement('summary'); summary.textContent = 'Catatan kualitas umpan';
+    const ul = document.createElement('ul'); ul.append(...notes.map(n => { const li = document.createElement('li'); li.textContent = n; return li; }));
+    details.append(summary, ul); meta.after(details);
+  }
+  if (day) for (const name of Object.keys(day.zones).sort()) zones.append(herdZoneCard(name, day.zones[name]));
+}
+$('herdDay').onchange = e => { selectedHerdDay = e.target.value; renderHerd(); };
+document.querySelector('.cond-link').addEventListener('click', () => showPage('herd'));
+setInterval(() => { renderHerd(); renderConditions(); }, 30000);
 
 async function setSprinkler(on, reason){
   if (!hasAccess('operate') || !fbConnected || !controlLoaded || !sensorView.online || !transportConnected || CFG.mode !== 'manual' || !window.SCSFirebase){ $('sprinklerReason').textContent = 'Izin, koneksi, atau mode belum siap; perintah tidak dikirim.'; return; }
@@ -196,6 +394,11 @@ async function setSprinkler(on, reason){
   $('sprinklerReason').textContent = 'Perintah dikirim, menunggu perangkat…';
 }
 function renderSprinkler(){
+  const cycle=sensorView.cycle;
+  const known=cycle?.capable;
+  const remain=known && Number.isInteger(cycle.remainSec) ? `${Math.floor(cycle.remainSec / 60)} menit ${cycle.remainSec % 60} detik` : 'belum diketahui';
+  $('cyclePhase').textContent=!known ? 'Status siklus belum diketahui.' : cycle.source==='manual' && cycle.phase==='spraying' ? 'Semprot manual · tanpa batas durasi otomatis.' : cycle.phase==='spraying' ? `Sedang menyemprot · sisa ${remain}.` : cycle.phase==='cooldown' ? `Cooldown sejak mati · sisa ${remain}.` : cycle.phase==='idle' ? 'Siklus sedang tidak menyemprot. Syarat mulai diperiksa perangkat.' : 'Fase siklus belum diketahui.';
+  $('cycleQuota').textContent=!known || !controlLoaded || !Number.isInteger(cycle.today) ? 'Jumlah semprot otomatis belum diketahui.' : !cycle.ntpValid || !cycle.day ? `Waktu WIB perangkat belum tersedia. Catatan ${cycle.today} mulai otomatis; tidak ada mulai otomatis baru sampai waktu valid.` : `${cycle.today}/${appliedCfg.maxCyclesPerDay} mulai otomatis · ${cycle.day} WIB${cycle.today>=appliedCfg.maxCyclesPerDay ? ' · batas harian tercapai' : ''}. Kuota bersama profil Suhu dan THI.`;
   const box = $('sprinklerState');
   if (sensorView.ssr === null){
     box.className = 'sprinkler unknown'; $('sprinklerText').textContent = 'BELUM DIKETAHUI';
@@ -204,19 +407,21 @@ function renderSprinkler(){
   }
   box.className = 'sprinkler ' + (sprinklerOn ? 'on' : 'off');
   $('sprinklerText').textContent = sprinklerOn ? 'MENYEMPROT' : 'MATI';
-  if (sprinklerOn && sprayStart){
-    const el = Math.floor((Date.now()-sprayStart)/1000);
-    $('sprinklerTimer').textContent = appliedCfg.mode === 'manual' ? 'Manual · menyala sampai dimatikan.' : `Terpantau menyala ${el} detik.`;
-  } else {
-    $('sprinklerTimer').textContent = appliedCfg.mode==='manual' ? 'Mode manual — gunakan tombol.' : `Otomatis ${basisName(appliedCfg)} · ${appliedCfg.autoSrc==='schedule' ? 'dalam jendela jadwal' : 'sepanjang waktu'}.`;
-  }
+  if (appliedCfg.mode==='manual') $('sprinklerTimer').textContent=sprinklerOn ? 'Manual · menyala sampai dimatikan, di luar batas otomatis.' : 'Mode manual · gunakan tombol.';
+  else $('sprinklerTimer').textContent=known && cycle.phase==='spraying' ? `Sisa semprot dari perangkat: ${remain}.` : known && cycle.phase==='cooldown' ? `Sisa cooldown dari perangkat: ${remain}.` : 'Status relay mengikuti laporan perangkat.';
 }
 setInterval(renderSprinkler, 1000);
 
 function autoControl(avg){
   if (!sensorView.online){ $('sprinklerReason').textContent = 'Tidak ada status perangkat terbaru. Nilai lama tidak dipakai sebagai data live.'; return; }
-  if (appliedCfg.mode==='auto' && !firmwareReady()){ $('sprinklerReason').textContent='Firmware kanan belum mendukung kebijakan baru. Upload v3.1; status relay tetap mengikuti laporan perangkat.'; return; }
+  if (appliedCfg.mode==='auto' && !firmwareReady()){ $('sprinklerReason').textContent='Perangkat belum mengonfirmasi firmware kebijakan 3 terbaru. Pengaturan otomatis terkunci; status relay tetap mengikuti laporan perangkat.'; return; }
   if (appliedCfg.mode==='auto' && sensorView.controlBasis!==appliedCfg.controlBasis){ $('sprinklerReason').textContent='Setting tersimpan; menunggu ESP kanan menerapkan dasar kontrol yang dipilih.'; return; }
+  if (appliedCfg.mode==='auto' && sensorView.cycle?.phase==='spraying'){ $('sprinklerReason').textContent='Siklus berjalan selama durasi yang dimulai perangkat. Suhu turun bukan syarat berhenti; pengaman sensor dan jadwal tetap berlaku.'; return; }
+  if (appliedCfg.mode==='auto' && (!sensorView.cycle?.ntpValid || !sensorView.cycle.day)){ $('sprinklerReason').textContent='Waktu WIB perangkat belum tersedia. Mulai otomatis diblokir; kuota tidak dihitung dari tanggal browser.'; return; }
+  if (appliedCfg.mode==='auto' && sensorView.cycle.today===null){ $('sprinklerReason').textContent='Kuota perangkat belum diketahui. Kelayakan mulai otomatis tidak dapat dipastikan.'; return; }
+  if (appliedCfg.mode==='auto' && sensorView.cycle.today>=appliedCfg.maxCyclesPerDay){ $('sprinklerReason').textContent='Batas mulai otomatis hari ini tercapai. Berganti profil atau mode tidak mengatur ulang kuota. Manual tidak termasuk batas otomatis.'; return; }
+  if (appliedCfg.mode==='auto' && sensorView.cycle.phase==='cooldown'){ $('sprinklerReason').textContent='Menunggu cooldown yang dimulai sejak sprinkler mati, sesuai laporan perangkat.'; return; }
+  if (appliedCfg.mode==='auto' && !sensorView.cycle.phase){ $('sprinklerReason').textContent='Fase siklus perangkat belum diketahui. Kelayakan mulai otomatis tidak dapat dipastikan.'; return; }
   const complete=appliedCfg.controlBasis==='thi' ? sensorView.thiComplete : sensorView.complete;
   if(appliedCfg.mode==='auto' && !complete){ $('sprinklerReason').textContent=`Otomatis ${basisName(appliedCfg)} diblokir: perlu ${appliedCfg.controlBasis==='thi' ? '6 DS + 4 DHT' : '6 DS'} valid/fresh.`; return; }
   if (appliedCfg.mode === 'manual'){
@@ -250,7 +455,7 @@ function drawChart(){
   const data = history.filter((d) => Date.now() - d.t < 3600000).slice(-1800);
   const sparse = data.length < 2;
   $('chartEmpty').hidden = !sparse;
-  ctx.font = '500 12px "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif';
+  ctx.font = '400 12px Manrope,"Segoe UI",sans-serif';
   if (sparse) return;
   const rh = $('chartMetric').value === 'humidity';
   const thi=$('chartMetric').value==='thi';
@@ -292,8 +497,8 @@ function drawChart(){
   };
   if(thi) draw('avg',T.thi,d=>d.thi);
   else {
-    for(let s=0;s<(rh?4:6);s++) draw(s, COLORS[s]+'cc', d=>values(d)[s]);
-    if ($('showAvg').checked) draw('avg', AVG_COLOR, d=>rh ? d.humidityAvg : d.avg);
+    for(let s=0;s<(rh?4:6);s++) draw(s, COLORS[s], d=>values(d)[s]);
+    if ($('showAvg').checked) draw('avg', T.avg, d=>rh ? d.humidityAvg : d.avg);
   }
 }
 window.addEventListener('resize', drawChart);
@@ -370,7 +575,7 @@ function pushEvent(msg){
   renderEvents();
 }
 function renderEvents(){
-  const ul = $('eventList'); ul.innerHTML = events.length?'':'<li class="hint">Belum ada event.</li>';
+  const ul = $('eventList'); ul.innerHTML = events.length?'':'<li class="hint">Belum ada aktivitas.</li>';
   events.forEach(e=>{
     const li = document.createElement('li');
     const text = document.createElement('div'); text.textContent = e.msg;
@@ -402,11 +607,11 @@ function clampToday(iso, hm){
 }
 function renderSchedList(){
   const box = $('schedList'); if (!box) return;
-  const locked = !hasAccess('settings') || CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected || savingSettings;
+  const locked = !hasAccess('settings') || CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected || !firmwareReady() || savingSettings;
   box.innerHTML = '';
   const slots = schedSlots();
   if (!slots.length){
-    box.innerHTML = '<div class="hint sched-empty">Belum ada jadwal — klik Tambah jadwal.</div>';
+    box.innerHTML = '<div class="hint sched-empty">Belum ada jadwal. Pilih Tambah jadwal.</div>';
   }
   slots.forEach((s, i) => {
     const f = SCS.formatIDDate(s.date);
@@ -448,6 +653,7 @@ function renderSchedList(){
     const stop = () => { clearTimeout(btn._t1); if (btn._stop) btn._stop(); };
     btn.addEventListener('pointerdown', start);
     ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => btn.addEventListener(ev, stop));
+    btn.addEventListener('click', e => { if (e.detail === 0) fn(); });
   }
   box.querySelectorAll('[data-inc]').forEach((b) => holdStep(b, () => stepDur(+b.dataset.inc, 1)));
   box.querySelectorAll('[data-dec]').forEach((b) => holdStep(b, () => stepDur(+b.dataset.dec, -1)));
@@ -603,9 +809,9 @@ function openTimePop(btn, i, s){
   refreshMin();
   if (hh < minH || (hh === minH && mi < minM)){ hh = minH; mi = minM; }
   const el = openPop(btn, i + '-time', `<div class="pk-date" data-v="date"></div><div class="pk-time">
-      <div class="pk-col"><button data-s="h" data-d="1">▲</button><input data-v="h" value="${pad2(hh)}" inputmode="numeric" maxlength="2" autocomplete="off" /><button data-s="h" data-d="-1">▼</button><span>Jam</span></div>
+      <div class="pk-col"><button data-s="h" data-d="1" aria-label="Tambah jam">▲</button><input data-v="h" aria-label="Jam WIB" value="${pad2(hh)}" inputmode="numeric" maxlength="2" autocomplete="off" /><button data-s="h" data-d="-1" aria-label="Kurangi jam">▼</button><span>Jam</span></div>
       <div class="pk-sep">:</div>
-      <div class="pk-col"><button data-s="m" data-d="1">▲</button><input data-v="m" value="${pad2(mi)}" inputmode="numeric" maxlength="2" autocomplete="off" /><button data-s="m" data-d="-1">▼</button><span>Menit</span></div>
+      <div class="pk-col"><button data-s="m" data-d="1" aria-label="Tambah menit">▲</button><input data-v="m" aria-label="Menit WIB" value="${pad2(mi)}" inputmode="numeric" maxlength="2" autocomplete="off" /><button data-s="m" data-d="-1" aria-label="Kurangi menit">▼</button><span>Menit</span></div>
     </div>
     <div class="pk-foot"><span class="hint">24 jam • WIB</span><span><button data-close>Batal</button> <button data-ok class="btn blue small">OK</button></span></div>`);
   if (!el) return;
@@ -657,7 +863,7 @@ function openTimePop(btn, i, s){
       repT = setTimeout(() => { repI = setInterval(() => step(w, d), 70); }, 380);
     });
     ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => b.addEventListener(ev, stopRep));
-    b.addEventListener('click', stopRep);
+    b.addEventListener('click', e => { stopRep(); if (e.detail === 0) step(w, d); });
   });
   el.querySelector('[data-close]').onclick = () => { stopRep(); closePicker(); };
   el.querySelector('[data-ok]').onclick = () => {
@@ -674,10 +880,12 @@ function syncButtons(){
   if (typeof closePicker === 'function') closePicker();
   $('btnAuto').classList.toggle('active', CFG.mode==='auto');
   $('btnManual').classList.toggle('active', CFG.mode==='manual');
+  $('btnAuto').setAttribute('aria-pressed', String(CFG.mode==='auto'));
+  $('btnManual').setAttribute('aria-pressed', String(CFG.mode==='manual'));
   $('btnSprayOn').disabled = $('btnSprayOff').disabled = !hasAccess('operate') || CFG.mode!=='manual' || !controlLoaded || !fbConnected || !sensorView.online || !transportConnected;
   $('btnManual').disabled = !hasAccess('operate') || !fbConnected || !controlLoaded || !transportConnected || !sensorView.online || savingSettings;
   $('btnAuto').disabled = $('btnManual').disabled || !firmwareReady();
-  const locked = !hasAccess('settings') || CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected || savingSettings;
+  const locked = !hasAccess('settings') || CFG.mode !== 'auto' || !fbConnected || !controlLoaded || !transportConnected || !firmwareReady() || savingSettings;
   const src = curAutoSrc();
   const isThresh = src === 'threshold';
   $('srcThreshold').checked = isThresh;
@@ -685,18 +893,16 @@ function syncButtons(){
   $('srcThreshold').disabled = $('srcSchedule').disabled = locked;
   $('basisTemperature').checked=CFG.controlBasis==='temperature'; $('basisThi').checked=CFG.controlBasis==='thi';
   $('basisTemperature').disabled=$('basisThi').disabled=locked;
-  ['inThreshold','rangeThreshold','inHysteresis','inMaxDur','inCooldown'].forEach((id)=>{ $(id).disabled = locked; });
+  ['inThreshold','rangeThreshold','inMaxCycles','inMaxDur','inCooldown'].forEach((id)=>{ $(id).disabled = locked; });
   $('btnSaveCfg').disabled = locked || !firmwareReady();
-  $('btnSaveCfg').textContent = savingSettings ? 'Menyimpan pengaturan…' : !fbConnected ? 'Login untuk mengatur' : !controlLoaded ? 'Menunggu konfigurasi perangkat' : locked ? 'Pengaturan terkunci' : 'Simpan Pengaturan';
+  $('btnSaveCfg').textContent = savingSettings ? 'Menyimpan pengaturan…' : !fbConnected ? 'Masuk untuk mengatur' : !controlLoaded ? 'Menunggu pengaturan perangkat' : locked ? 'Pengaturan terkunci' : 'Simpan pengaturan';
   $('btnSaveCfg').setAttribute('aria-busy', String(savingSettings));
   const thi=CFG.controlBasis==='thi';
   for(const id of ['inThreshold','rangeThreshold']){ $(id).min=thi ? 0 : -55; $(id).max=thi ? 120 : 125; $(id).value=CFG.threshold; }
-  $('inHysteresis').value=CFG.hysteresis;
   $('thresholdInputLabel').textContent=`Threshold semprot ${basisName(CFG)}${thi ? ' (indeks)' : ' (°C)'}`;
-  $('hysteresisInputLabel').textContent=`Hysteresis (${thi ? 'poin THI' : '°C'})`;
   $('scheduleTitle').textContent=`Jendela jadwal ${basisName(CFG)} (maks 6×)`;
-  $('controlBasisHint').textContent=`Profil ${basisName(CFG)}: threshold, hysteresis, durasi/cooldown dan jadwal sendiri. ${thi ? 'THI dari rata-rata 6 DS + RH rata-rata 4 DHT.' : 'DHT tidak wajib untuk kontrol suhu.'} Klik Simpan untuk menerapkan.`;
-  $('inMaxDur').value = CFG.maxDuration; $('inCooldown').value = CFG.cooldown;
+  $('controlBasisHint').textContent=`Profil ${basisName(CFG)} menyimpan threshold, durasi, cooldown, dan jadwal terpisah. Batas harian dipakai bersama kedua profil. ${thi ? 'THI memakai rata-rata 6 DS dan RH rata-rata 4 DHT.' : 'Kontrol suhu tidak memerlukan DHT.'} Simpan untuk menerapkan.`;
+  $('inMaxDur').value = CFG.maxDuration / 60; $('inCooldown').value = CFG.cooldown / 60; $('inMaxCycles').value = CFG.maxCyclesPerDay;
   $('threshGroup').style.display = '';
   $('protectGroup').style.display = '';
   $('schedGroup').style.display = isThresh ? 'none' : '';
@@ -706,7 +912,7 @@ function syncButtons(){
 }
 async function setMode(mode){
   if (!hasAccess('operate') || !fbConnected || !controlLoaded || !transportConnected || !sensorView.online || (mode==='auto' && !firmwareReady())){
-    $('settingsStatus').textContent='Perangkat harus online dengan firmware kanan v3.1 sebelum mengaktifkan otomatis.'; return;
+    $('settingsStatus').textContent='Perangkat harus online dan mengonfirmasi firmware kebijakan 3 sebelum otomatis dapat diaktifkan.'; return;
   }
   const revision=accessRevision;
   try { await SCSFirebase.pushControl({mode}); if(revision!==accessRevision)return; CFG.mode=mode; saveCfg(); syncButtons(); }
@@ -718,7 +924,7 @@ $('btnSprayOn').onclick = ()=> setSprinkler(true, 'tombol manual');
 $('btnSprayOff').onclick = ()=> setSprinkler(false, 'tombol manual');
 async function fbPushControl(){
   if (!hasAccess('settings') || !fbConnected || !controlLoaded || !transportConnected || !firmwareReady() || !window.SCSFirebase){
-    $('settingsStatus').textContent='Belum dikirim: login, koneksi, dan firmware kanan v3.1 harus siap.'; return;
+    $('settingsStatus').textContent='Belum dikirim: izin, koneksi, dan konfirmasi firmware kebijakan 3 terbaru harus siap.'; return;
   }
   const submitted=SCSControl.normalize(SCSControl.capture(CFG));
   const revision=accessRevision;
@@ -728,12 +934,12 @@ async function fbPushControl(){
     if(revision!==accessRevision)return;
     submitted.mode=appliedCfg.mode;
     appliedCfg=submitted; CFG=SCSControl.normalize(submitted); settingsDirty=false; saveCfg();
-    $('settingsStatus').textContent=`Profil ${basisName(submitted)} tersimpan di Firebase; ESP membaca setting sekitar tiap 5 detik.`;
-    pushEvent(`Setting ${basisName(submitted)}: threshold ${submitted.threshold}${basisUnit(submitted)}, ${submitted.autoSrc==='schedule' ? 'dalam jadwal' : 'sepanjang waktu'}`);
+    $('settingsStatus').textContent=window.SCS_SYNTHETIC ? `Profil ${basisName(submitted)} diterapkan pada simulasi lokal. Tidak dikirim ke Firebase atau perangkat.` : `Profil ${basisName(submitted)} tersimpan. Menunggu laporan perangkat untuk memastikan penerapan.`;
+    pushEvent(`Pengaturan ${basisName(submitted)}: threshold ${submitted.threshold}${basisUnit(submitted)}, ${submitted.autoSrc==='schedule' ? 'dalam jadwal' : 'sepanjang waktu'}`);
   } catch {
     if(revision!==accessRevision)return;
     CFG=SCSControl.normalize(submitted); settingsDirty=true; saveCfg();
-    $('settingsStatus').textContent='Gagal menyimpan. Perubahan masih berupa draft; coba lagi.';
+    $('settingsStatus').textContent='Gagal menyimpan. Perubahan belum diterapkan; coba lagi.';
   }
   finally { savingSettings=false; syncButtons(); refreshTelemetry(); drawChart(); }
 }
@@ -741,28 +947,31 @@ function updateModeInfo(){
   const el = $('modeInfo'); if (!el) return;
   const cfg=appliedCfg;
   if (cfg.mode !== 'auto'){
-    el.textContent = 'Manual: ON bertahan sampai perintah OFF, termasuk saat internet putus. Uji tanpa beban AC dahulu.';
+    el.textContent = 'Manual menyala sampai dimatikan, termasuk saat internet putus. Durasi, cooldown, dan batas harian otomatis tidak membatasi manual. Uji tanpa beban AC dahulu.';
     return;
   }
-  el.textContent=`${basisName(cfg)} ≥ ${cfg.threshold.toFixed(1)}${basisUnit(cfg)} · ${cfg.autoSrc==='schedule' ? 'hanya dalam jadwal' : 'sepanjang waktu'} · maks ${cfg.maxDuration} dtk, cooldown ${cfg.cooldown} dtk. Data tidak lengkap → otomatis OFF.`;
+  el.textContent=`Mulai saat ${basisName(cfg)} ≥ ${cfg.threshold.toFixed(1)}${basisUnit(cfg)} · ${cfg.autoSrc==='schedule' ? 'hanya dalam jadwal' : 'sepanjang waktu'}. Semprot ${cfg.maxDuration / 60} menit, cooldown ${cfg.cooldown / 60} menit sejak mati, maksimal ${cfg.maxCyclesPerDay} mulai otomatis per hari WIB. Data tidak lengkap: otomatis mati.`;
 }
 function updateSchedHint(){
   const el = $('schedHint'); if (!el) return;
   if (curAutoSrc() === 'threshold'){ el.textContent = ''; el.style.display = 'none'; return; }
   el.style.display = '';
   const slots = schedSlots();
-  if (!slots.length){ el.textContent = 'Belum ada jadwal — tambah minimal 1.'; return; }
+  if (!slots.length){ el.textContent = 'Belum ada jadwal. Tambahkan minimal satu.'; return; }
   const now = Date.now();
   const run = SCS.anyScheduleActive(now, slots);
   const nx = SCS.nextSchedule(now, slots);
   const daftar = slots.map((s) => SCS.formatIDSlot(s)).join(', ');
-  el.textContent = `${basisName(CFG)} · ${slots.length} jendela: ${daftar}. ` + (run ? 'JENDELA AKTIF, bukan paksa ON. ' : (nx ? `Berikutnya ${SCS.formatIDSlot(nx)}. ` : '')) + `Tetap mengikuti threshold ${CFG.threshold}${basisUnit(CFG)}, hysteresis, durasi maks dan cooldown.`;
+  el.textContent = `${basisName(CFG)} · ${slots.length} jendela: ${daftar}. ` + (run ? 'Jendela aktif, bukan perintah menyala. ' : (nx ? `Berikutnya ${SCS.formatIDSlot(nx)}. ` : '')) + `Tetap mengikuti threshold ${CFG.threshold}${basisUnit(CFG)}, durasi semprot, cooldown sejak mati, dan batas harian bersama.`;
 }
 let fbTries = 0, authResolved=false, sessionWaitTimer=null;
 function sessionStatus(message, failed=false){
   if (authResolved) return;
   $('sessionMessage').textContent=message;
   $('sessionPanel').setAttribute('aria-busy',String(!failed));
+  if (failed) $('sessionPanel').dataset.failed=''; else delete $('sessionPanel').dataset.failed;
+  $('appShell').dataset.state=failed ? 'failed' : 'loading';
+  $('appShell').setAttribute('aria-busy',String(!failed));
   $('sessionRetry').hidden=!failed;
 }
 function sessionFailed(){
@@ -786,7 +995,11 @@ function setAuthView(ok, email=''){
   authResolved=true;
   clearTimeout(sessionWaitTimer);
   $('sessionPanel').hidden=true;
+  delete $('sessionPanel').dataset.failed;
+  $('sessionRetry').hidden=true;
   $('sessionPanel').setAttribute('aria-busy','false');
+  $('appShell').dataset.state=ok ? 'ready' : 'loading';
+  $('appShell').setAttribute('aria-busy','false');
   if (!ok){ closeSensors(false); closeSide(); closePicker(); closeConfirm(false); }
   const nextView=ok ? $('appShell') : $('authPanel');
   if (nextView.hidden){ nextView.classList.remove('view-in'); void nextView.offsetWidth; nextView.classList.add('view-in'); }
@@ -837,12 +1050,13 @@ function fbConnect(){
   setFbStatus('Menghubungkan ke Firebase…', 'sim');
   SCSFirebase.connect({
     onAccess: record=>{
+      telemetryResolved=false;herdResolved=false;herdFailed=false;herdDays=null;
       accessRevision++;
       accessState=SCSAccess.normalize(record);window.smartcowAccess=accessState;
       closeSensors(false);closePicker();closeConfirm(false);
       controlLoaded=false;settingsDirty=false;telemetry=null;lastUpdate=null;history=[];logs=[];events=[];
       $('settingsStatus').textContent='';
-      sprinklerOn=false;sprayStart=null;
+      sprinklerOn=false;
       localStorage.removeItem('scs_logs');localStorage.removeItem('scs_events');localStorage.removeItem('scs_hist');
       renderLogs();renderEvents();refreshTelemetry();drawChart();
       applyAccessView();window.SCSAdmin?.sync();
@@ -856,7 +1070,7 @@ function fbConnect(){
       setAuthView(ok, email);
       if(!ok){accessState=null;window.smartcowAccess=null;window.SCSAdmin?.sync();}
       applyAccessView();
-      if (!ok){ controlLoaded=false; settingsDirty=false; telemetry=null; transportConnected=false; lastUpdate=null; history=[]; logs=[]; events=[]; sprinklerOn=false; sprayStart=null; renderLogs(); renderEvents(); drawChart(); }
+      if (!ok){ controlLoaded=false; settingsDirty=false; telemetry=null; telemetryResolved=false; herdResolved=false; herdFailed=false; herdDays=null; transportConnected=false; lastUpdate=null; history=[]; logs=[]; events=[]; sprinklerOn=false; renderLogs(); renderEvents(); renderHerd(); drawChart(); }
       setFbStatus(ok ? '' : 'Masuk dengan akun Firebase yang sudah ada.', 'login'); syncButtons(); refreshTelemetry();
     },
     onControl: (ctl)=>{
@@ -869,23 +1083,28 @@ function fbConnect(){
       saveCfg(); syncButtons(); refreshTelemetry(); renderLogs(); drawChart();
     },
     onTelemetry: (p)=>{
+      if (fbConnected && hasAccess('monitor')) telemetryResolved=true;
       if (!fbConnected || !hasAccess('monitor')) return;
       onNewData(p);
       if (sensorView.ssr !== null){
-        const changed=(sensorView.ssr===1)!==sprinklerOn;
         sprinklerOn=sensorView.ssr===1;
-        if (changed) sprayStart=sprinklerOn?Date.now():null;
         renderSprinkler();
       }
     },
     onSeedLogs: (rows)=>{ if (!fbConnected || !hasAccess('monitor')) return; logs = SCS.pruneLogs(rows, 120); localStorage.setItem('scs_logs', JSON.stringify(logs)); renderLogs(); },
-    onEvents: (rows)=>{ if (!fbConnected || !hasAccess('monitor')) return; events=rows; renderEvents(); }
+    onEvents: (rows)=>{ if (!fbConnected || !hasAccess('monitor')) return; events=rows; renderEvents(); },
+    onHerd: (days)=>{
+      if (!fbConnected || !hasAccess('monitor')) return;
+      herdResolved=true; herdFailed=days===null; herdDays=days;
+      renderHerd(); renderConditions();
+    }
   })
     .catch((e)=>{ sessionFailed(); setFbStatus('Firebase: ' + e.message, 'err'); setConn('err'); });
 }
 function setConn(kind){
   const b = $('connBadge');
-  if (kind==='sim'){ b.textContent='MENGHUBUNGKAN'; b.className='badge sim'; }
+  b.dataset.busy = String(kind==='sim');
+  if (kind==='sim'){ b.textContent='MENGHUBUNGKAN…'; b.className='badge sim'; }
   if (kind==='live'){ b.textContent='TERHUBUNG'; b.className='badge live'; }
   if (kind==='err'){ b.textContent='KONEKSI GAGAL'; b.className='badge err'; }
   if (kind==='offline'){ b.textContent='OFFLINE / DATA LAMA'; b.className='badge offline'; }
@@ -913,24 +1132,25 @@ $('btnLogout').onclick=async()=>{
 
 function readSettingsInputs(){
   const fields=[['inThreshold','threshold',CFG.controlBasis==='thi' ? 0 : -55,CFG.controlBasis==='thi' ? 120 : 125],
-    ['inHysteresis','hysteresis',0,50],['inMaxDur','maxDuration',1,10800],['inCooldown','cooldown',0,10800]];
+    ['inMaxDur','maxDuration',1,10800],['inCooldown','cooldown',0,86400],['inMaxCycles','maxCyclesPerDay',1,100]];
   for(const [id,key,min,max] of fields){
-    const value=Number($(id).value);
+    const value=Number($(id).value) * (key==='maxDuration' || key==='cooldown' ? 60 : 1);
     if($(id).value.trim() && Number.isFinite(value)){
       const bounded=Math.max(min,Math.min(max,value));
-      CFG[key]=key==='maxDuration' || key==='cooldown' ? Math.round(bounded) : bounded;
+      CFG[key]=key==='threshold' ? bounded : Math.round(bounded);
     }
   }
 }
 $('rangeThreshold').oninput = e => { $('inThreshold').value = e.target.value; readSettingsInputs(); markSettingsDirty(); };
 $('inThreshold').oninput = e => { $('rangeThreshold').value = e.target.value; readSettingsInputs(); markSettingsDirty(); };
-for(const id of ['inHysteresis','inMaxDur','inCooldown']) $(id).oninput=()=>{readSettingsInputs();markSettingsDirty();};
+for(const id of ['inMaxCycles','inMaxDur','inCooldown']) $(id).oninput=()=>{readSettingsInputs();markSettingsDirty();};
 function changeBasis(basis){ readSettingsInputs(); CFG=SCSControl.selectBasis(CFG,basis); markSettingsDirty(); syncButtons(); }
 $('basisTemperature').onchange=()=>changeBasis('temperature');
 $('basisThi').onchange=()=>changeBasis('thi');
 $('srcThreshold').onchange = () => { readSettingsInputs(); CFG.autoSrc = 'threshold'; markSettingsDirty(); syncButtons(); };
 $('srcSchedule').onchange = () => { readSettingsInputs(); CFG.autoSrc = 'schedule'; markSettingsDirty(); syncButtons(); };
 $('btnSaveCfg').onclick = ()=>{
+  for (const id of ['inThreshold','inMaxDur','inCooldown','inMaxCycles']) if (!$(id).reportValidity()) return;
   CFG.autoSrc = $('srcSchedule').checked ? 'schedule' : 'threshold';
   readSettingsInputs();
   CFG.schedules = readSchedList();
@@ -1039,29 +1259,28 @@ function closeSensors(restoreFocus=true){
 }
 let selectedPage='dash';
 function applyAccessView(){
-  const monitor=hasAccess('monitor'),admin=hasAccess('admin');
+  const loading=!authResolved,monitor=hasAccess('monitor'),admin=hasAccess('admin');
   $('adminNav').hidden=$('profileAdmin').hidden=!admin;
   $('profileRole').textContent=admin?'Admin':accessState?.enabled?'User':'Akses belum aktif';
-  document.querySelectorAll('[data-permission]').forEach(n=>{n.hidden=!hasAccess(n.dataset.permission);});
-  document.querySelectorAll('.side-link').forEach(n=>{if(n.dataset.page!=='admin')n.hidden=n.dataset.page!=='dash'&&!monitor;});
+  document.querySelectorAll('[data-permission]').forEach(n=>{n.hidden=!loading&&!hasAccess(n.dataset.permission);});
+  document.querySelectorAll('.side-link').forEach(n=>{if(n.dataset.page!=='admin')n.hidden=!loading&&n.dataset.page!=='dash'&&!monitor;});
   $('accessNotice').textContent=accessState?.enabled?'Akun ini belum memiliki izin Kandang A. Hubungi Admin.':'Akses Kandang A belum aktif. Hubungi Admin untuk mendapatkan izin.';
-  if(selectedPage==='admin'&&!admin || ['log','event'].includes(selectedPage)&&!monitor)selectedPage='dash';
+  if(!loading&&(selectedPage==='admin'&&!admin || ['log','event','herd'].includes(selectedPage)&&!monitor))selectedPage='dash';
   document.querySelectorAll('main.container > section').forEach(n=>{
     let permitted=true;
-    if(n.id==='accessNotice')permitted=!monitor;
+    if(n.id==='accessNotice')permitted=!loading&&!monitor;
     else if(n.dataset.page==='admin')permitted=admin;
-    else if(n.matches('.command-grid,.summary-grid,.insights-grid') || ['log','event'].includes(n.dataset.page))permitted=monitor;
+    else if(n.matches('.summary-grid,.command-grid,.insights-grid,.cond-section,.settings-section') || ['log','event','herd'].includes(n.dataset.page))permitted=loading||monitor;
     n.hidden=!permitted || (!!n.dataset.page&&n.dataset.page!==selectedPage);
     n.style.display=n.hidden?'none':'';
   });
   document.querySelectorAll('.side-link').forEach(b=>{b.classList.toggle('active',b.dataset.page===selectedPage);if(b.dataset.page===selectedPage)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-  $('pageBreadcrumb').textContent={dash:'Overview',log:'Riwayat sensor',event:'Aktivitas sprinkler',admin:'Dashboard Admin'}[selectedPage];
-  if(fbConnected)document.title=`${$('pageBreadcrumb').textContent} — COSTMOSYS`;
+  if(fbConnected){document.title=`${PAGE_TITLES[selectedPage]} — COSTMOSYS`;$('pageBreadcrumb').textContent=PAGE_TITLES[selectedPage];}
 }
 function showPage(p){
   closeSensors(false);
-  if (!['log','event','admin'].includes(p)) p = 'dash';
-  if(p==='admin'&&!hasAccess('admin') || ['log','event'].includes(p)&&!hasAccess('monitor'))p='dash';
+  if (!['log','event','herd','admin'].includes(p)) p = 'dash';
+  if(p==='admin'&&!hasAccess('admin') || ['log','event','herd'].includes(p)&&!hasAccess('monitor'))p='dash';
   selectedPage=p;
   let pageIndex=0;
   document.querySelectorAll('main.container > section').forEach((s) => {
@@ -1079,7 +1298,7 @@ function showPage(p){
   });
   document.querySelectorAll('.side-link').forEach((b) => { b.classList.toggle('active', b.dataset.page === p); if(b.dataset.page===p) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
   applyAccessView();
-  document.title = `${$('pageBreadcrumb').textContent} — COSTMOSYS`;
+  document.title = `${PAGE_TITLES[p]} — COSTMOSYS`;
   if(fbConnected)try { localStorage.setItem('scs_page', p); } catch {}
   closeSide();
   window.scrollTo(0, 0);
@@ -1120,12 +1339,11 @@ $('confirmNo').onclick = () => closeConfirm(false);
 $('confirmOverlay').addEventListener('pointerdown', (e) => { if (e.target === $('confirmOverlay')) closeConfirm(false); });
 document.querySelectorAll('.side-link').forEach((b) => { b.addEventListener('click', () => showPage(b.dataset.page)); });
 history=[]; logs=[]; events=[];
-buildGrid(6); buildHumidityGrid(); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
+buildGrid(6); buildHumidityGrid(); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler(); renderHerd(); renderConditions();
 try { showPage(localStorage.getItem('scs_page') || 'dash'); } catch { showPage('dash'); }
 document.title='Memuat — COSTMOSYS';
 $('localPreviewNotice').hidden=!['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname);
-window.addEventListener('resize',()=>setSide($('sidebar').classList.contains('open')));
-document.querySelector('.workspace').addEventListener('transitionend',e=>{ if(e.target===e.currentTarget && e.propertyName==='margin-left') drawChart(); });
+window.addEventListener('resize',()=>setSide($('sidebar').classList.contains('open') && mobileNavigation()));
 sessionWaitTimer=setTimeout(sessionFailed,15000);
 fbConnect();
 setInterval(refreshTelemetry,1000);
