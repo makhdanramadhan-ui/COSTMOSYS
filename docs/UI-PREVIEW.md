@@ -34,7 +34,7 @@ Bagian konfigurasi dan tren memiliki lebar konten yang sejajar. Container query 
 
 ## Pengaturan dan administrasi
 
-Ringkasan dan garis threshold pada grafik mengikuti dasar kontrol yang sudah tersimpan. Mengedit draft atau berpindah pilihan sebelum menyimpan tidak mengubah threshold terapan. Pembacaan pada dasar lain tetap tersedia untuk monitoring tanpa perbandingan threshold yang tidak relevan. Jika konfigurasi belum dimuat, ambang tidak ditampilkan seolah sudah diketahui.
+Ringkasan dan garis threshold pada grafik mengikuti dasar kontrol yang sudah tersimpan. Mengedit draft atau berpindah pilihan sebelum menyimpan tidak mengubah threshold terapan. Pembacaan pada dasar lain tetap tersedia untuk monitoring tanpa perbandingan threshold yang tidak relevan. Jika konfigurasi belum dimuat, threshold tidak ditampilkan seolah sudah diketahui.
 
 Dashboard Admin memisahkan form pembuatan akun, kartu akun yang sedang login, dan daftar akun. Kartu User menyediakan tindakan pengaturan izin, aktivasi, dan penghapusan akses setelah konfirmasi. Admin baru memperoleh seluruh izin; Admin yang sudah ada tidak dapat diedit atau dihapus dari dashboard. Penghapusan akses aplikasi tidak sama dengan penghapusan identitas Firebase Auth.
 

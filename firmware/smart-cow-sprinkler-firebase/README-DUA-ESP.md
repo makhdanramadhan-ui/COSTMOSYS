@@ -118,6 +118,6 @@ Kedua FINAL berhasil dikompilasi terpisah sebagai `.ino`: PlatformIO `esp32dev`,
 7. Putus internet saja/boot tanpa Wi-Fi: sensor dan logika lokal tetap berjalan, HTTP tidak menahan loop; NTP/jadwal punya keterbatasan boot.
 8. Reboot kiri: boot ID baru diterima. Uji router reconnect/kanal dan jarak nyata 15 m saat sapi/orang bergerak.
 9. Uji THI: bandingkan rumus dengan angka rata-rata DS/RH; lepas satu DHT → auto THI OFF, auto suhu tetap boleh jika DS lengkap. Pindah profil dan pastikan threshold/durasi/cooldown/jadwal terpisah.
-10. Uji jadwal Suhu dan THI: bawah threshold saat slot mulai tetap OFF; ambang tercapai boleh ON; hysteresis/maksimum/cooldown tetap berlaku; akhir slot OFF walau nilai tinggi. Uji slot melewati tengah malam dan NTP belum valid.
+10. Uji jadwal Suhu dan THI: bawah threshold saat slot mulai tetap OFF; threshold tercapai boleh ON; hysteresis/maksimum/cooldown tetap berlaku; akhir slot OFF walau nilai tinggi. Uji slot melewati tengah malam dan NTP belum valid.
 11. Uji manual terpisah, pahami ON menetap saat internet/data putus. Tutup browser tidak mematikan relay.
 12. Saat ESP berhenti mengirim, web harus berhenti menunjukkan LIVE; relay menjadi belum diketahui. Jangan sambungkan AC sebelum uji dan keselamatan diperiksa.
