@@ -19,6 +19,10 @@
     ],
     "headers": [
       {
+        "source": "/",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }]
+      },
+      {
         "source": "**/*.@(css|js)",
         "headers": [{ "key": "Cache-Control", "value": "max-age=3600" }]
       },
