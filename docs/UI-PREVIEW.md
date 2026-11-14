@@ -1,6 +1,8 @@
-# Antarmuka dan preview SmartCow
+# Antarmuka dan preview COSTMOSYS
 
-Dashboard menampilkan kondisi Kandang A, status sprinkler, konfigurasi kontrol, tren sensor, dan administrasi akun sesuai izin pengguna. Tampilan menggunakan tema terang/gelap dan layout responsif, tanpa library UI, font, atau ikon eksternal tambahan. Aksen jingga, biru, dan hijau membedakan suhu, kelembapan, dan THI; status juga disampaikan melalui teks.
+COSTMOSYS (Cow Stress Monitoring System) menampilkan kondisi Kandang A, status sprinkler, konfigurasi kontrol, tren sensor, dan administrasi akun sesuai izin pengguna. Nama COSTMOSYS hanya mengubah merek antarmuka; proyek Firebase `smartcow-de25f`, domain Hosting, ID perangkat, path RTDB, dan namespace JavaScript tetap dipertahankan agar akses yang sudah berjalan tidak terputus. THI tetap indikator lingkungan agregat, bukan diagnosis stres atau kesehatan sapi.
+
+Tampilan memakai tema terang/gelap dan layout responsif tanpa library UI, font, atau ikon eksternal; ikon berupa SVG inline. Permukaan datar berbatas tipis menggantikan bayangan lunak, dengan aksen jingga untuk suhu, biru untuk kelembapan, dan hijau untuk THI. Status juga disampaikan melalui teks, bukan warna saja. Badge koneksi, status sprinkler, dan nilai kosong membedakan terhubung, offline atau data lama, belum diketahui, dan belum tersedia.
 
 ## Preview lokal
 

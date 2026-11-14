@@ -1,10 +1,10 @@
-# SmartCow
+# COSTMOSYS
 
-SmartCow adalah proyek pemantauan lingkungan kandang dan pengendalian sprinkler yang menggabungkan perangkat embedded, komunikasi nirkabel, Firebase, serta dashboard web. Pengembangannya juga mencakup computer vision untuk mengenali postur sapi dan keberadaan orang dari CCTV.
+COSTMOSYS (Cow Stress Monitoring System) adalah proyek pemantauan lingkungan kandang dan pengendalian sprinkler yang menggabungkan perangkat embedded, komunikasi nirkabel, Firebase, serta dashboard web. Pengembangannya juga mencakup computer vision untuk mengenali postur sapi dan keberadaan orang dari CCTV.
 
 Pengerjaannya tidak berhenti pada menampilkan angka sensor. Sistem perlu membedakan pembacaan terkini dari data yang kedaluwarsa, menjalankan kontrol perangkat tanpa bergantung pada browser, dan membatasi kewenangan pengguna saat mengubah pengaturan atau mengoperasikan sprinkler.
 
-Repositori ini memuat aplikasi web, firmware ESP32, aturan akses database, dan pengujiannya. Kode training, bobot, serta evaluasi computer vision dikelola dalam [repositori Machine Learning SmartCow YOLO26n](https://github.com/makhdanramadhan-ui/Machine-Learning-SmartCow-YOLO26n).
+Repositori ini memuat aplikasi web, firmware ESP32, aturan akses database, dan pengujiannya. Kode training, bobot, serta evaluasi computer vision dikelola dalam [repositori Machine Learning COSTMOSYS YOLO26n](https://github.com/makhdanramadhan-ui/Machine-Learning-COSTMOSYS-YOLO26n).
 
 ## Arsitektur sistem
 
@@ -58,7 +58,7 @@ Model di-fine-tune melalui Ultralytics dan PyTorch menggunakan CPU. Evaluasi pad
 
 Jalur CCTV dijalankan pada komputer atau server, bukan ESP32. Hasilnya belum dihubungkan ke Firebase atau dashboard dalam repositori ini. Pelacakan identitas sapi dan perhitungan durasi berdiri/berbaring per individu juga belum divalidasi; postur berbaring tidak otomatis berarti tidur.
 
-Detail dataset, konfigurasi training, bobot `best.pt`, contoh label versus prediksi, dan hasil evaluasi tersedia di [Machine Learning SmartCow YOLO26n](https://github.com/makhdanramadhan-ui/Machine-Learning-SmartCow-YOLO26n). Dataset serta video penuh tidak diduplikasi di sini.
+Detail dataset, konfigurasi training, bobot `best.pt`, contoh label versus prediksi, dan hasil evaluasi tersedia di [Machine Learning COSTMOSYS YOLO26n](https://github.com/makhdanramadhan-ui/Machine-Learning-COSTMOSYS-YOLO26n). Dataset serta video penuh tidak diduplikasi di sini.
 
 ## Pengujian dan status pengembangan
 
@@ -66,7 +66,7 @@ Tes aplikasi mencakup perhitungan suhu/THI, freshness sensor, profil kontrol, ja
 
 Firmware FINAL sebelumnya berhasil dikompilasi pada Arduino-ESP32 2.0.17 dengan library sensor dan ArduinoJson yang dicatat dalam panduan firmware. Callback core 3.x tersedia, tetapi kompilasi pada core tersebut belum diverifikasi. Pengujian perangkat fisik, ketepatan sensor, jangkauan radio, dan keselamatan instalasi tetap perlu dilakukan di lokasi.
 
-SmartCow masih merupakan pilot. TLS firmware masih memakai `setInsecure()`, autentikasi perangkat menggunakan Database Secret legacy, dan ESP-NOW belum dienkripsi. Pengaturan juga belum persisten setelah reboot. Batas tersebut tidak disamakan dengan kesiapan produksi atau jaminan keselamatan.
+COSTMOSYS masih merupakan pilot. TLS firmware masih memakai `setInsecure()`, autentikasi perangkat menggunakan Database Secret legacy, dan ESP-NOW belum dienkripsi. Pengaturan juga belum persisten setelah reboot. Batas tersebut tidak disamakan dengan kesiapan produksi atau jaminan keselamatan.
 
 ## Dokumentasi teknis
 
@@ -75,8 +75,9 @@ SmartCow masih merupakan pilot. TLS firmware masih memakai `setInsecure()`, aute
 | [Firmware dua ESP32](firmware/smart-cow-sprinkler-firebase/README-DUA-ESP.md) | Wiring, library, pairing, upload, kontrak data, kebijakan relay, dan checklist perangkat |
 | [Admin dan User](docs/ADMIN-USER.md) | Peran, izin, pengelolaan akun, Database Rules, dan pengujian emulator |
 | [Antarmuka dan preview](docs/UI-PREVIEW.md) | Menjalankan dashboard lokal, perilaku sesi, dan pengujian antarmuka |
+| [Integrasi data](docs/INTEGRATION.md) | Jalur telemetri ke dashboard, freshness, dan bukti emulator |
 | [Spesifikasi produk](PRODUCT.md) | Cakupan fitur dan batas pengoperasian |
 | [Istilah proyek](CONTEXT.md) | Definisi istilah pengukuran dan kontrol |
-| [Model YOLO26n](https://github.com/makhdanramadhan-ui/Machine-Learning-SmartCow-YOLO26n) | Dataset, training, bobot, dan evaluasi ML |
+| [Model YOLO26n](https://github.com/makhdanramadhan-ui/Machine-Learning-COSTMOSYS-YOLO26n) | Dataset, training, bobot, dan evaluasi ML |
 
 Instalasi SSR dan solenoid 220 V harus ditangani orang kompeten, dengan pengujian awal tanpa beban AC. Jangan menyimpan password atau Database Secret dalam repositori publik; kredensial yang pernah terekspos perlu dirotasi.

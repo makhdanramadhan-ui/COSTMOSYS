@@ -36,13 +36,13 @@ function applyTheme(t){
   localStorage.setItem('scs_theme', document.documentElement.dataset.theme);
   const light = document.documentElement.dataset.theme === 'light';
   const b = $('themeBtn');
-  if (b){ b.textContent = light ? '☾' : '☼'; b.title = light ? 'Gunakan tema gelap' : 'Gunakan tema terang'; b.setAttribute('aria-label', b.title); }
+  if (b){ b.innerHTML = `<svg class="icon" aria-hidden="true"><use href="#i-${light ? 'moon' : 'sun'}"/></svg>`; b.title = light ? 'Gunakan tema gelap' : 'Gunakan tema terang'; b.setAttribute('aria-label', b.title); }
   if (typeof drawChart === 'function') drawChart();
 }
 function chartTheme(){
   return document.documentElement.dataset.theme === 'light'
-    ? { grid: '#c7cfdb', txt: '#536177', empty: '#536177', threshold: '#a55b16', thi: '#14695b' }
-    : { grid: '#46546a', txt: '#b4c1d3', empty: '#b4c1d3', threshold: '#f5cc91', thi: '#8de1cd' };
+    ? { grid: '#cbd3de', txt: '#565e6c', empty: '#565e6c', threshold: '#a55b16', thi: '#14695b' }
+    : { grid: '#3b4658', txt: '#a9b5c6', empty: '#a9b5c6', threshold: '#f5cc91', thi: '#8de1cd' };
 }
 
 function tickClock(){
@@ -138,7 +138,7 @@ function renderSensors(){
   else if (!temperatureActive){ pill.textContent=sensorView.complete ? 'MONITORING SUHU' : 'DATA SUHU PARSIAL · MONITORING'; pill.className='status-pill neutral'; }
   else if (!sensorView.complete){ pill.textContent='DATA PARSIAL · AUTO SUHU DIBLOKIR'; pill.className='status-pill waspada'; }
   else if (avg >= tempProfile.threshold + 1){ pill.textContent='SUHU TINGGI · DI ATAS AMBANG'; pill.className='status-pill bahaya'; }
-  else if (avg >= tempProfile.threshold){ pill.textContent='⚠️ WASPADA — AMBANG TERSENTUH'; pill.className='status-pill waspada'; }
+  else if (avg >= tempProfile.threshold){ pill.textContent='WASPADA — AMBANG TERSENTUH'; pill.className='status-pill waspada'; }
   else { pill.textContent='DI BAWAH AMBANG SUHU'; pill.className='status-pill normal'; }
   $('dsSummary').textContent = `${sensorView.validCount}/6 DS valid · rata-rata ${sensorView.complete ? 'lengkap' : 'parsial'}${sensorView.legacy ? ' · firmware lama' : ''}`;
   $('sensorTitle').textContent = `6 titik suhu · ${sensorView.validCount} valid`;
@@ -162,6 +162,7 @@ function renderSensors(){
   $('humidityStatus').textContent = sensorView.humidityComplete ? '4 TITIK TERPANTAU' : goodRH.length ? 'DATA KELEMBAPAN PARSIAL' : 'DATA BELUM TERSEDIA';
   $('humidityStatus').className = 'status-pill ' + (sensorView.humidityComplete ? 'normal' : 'neutral');
   $('thiValue').textContent=fmtValue(sensorView.thi);
+  for (const id of ['avgTemp','avgHumidity','thiValue']) $(id).parentElement?.classList.toggle('no-data', $(id).textContent==='—');
   $('thiThresholdLabel').textContent=controlLoaded ? thiProfile.threshold.toFixed(1) : '—';
   $('thiSummary').textContent=`${sensorView.validCount}/6 DS + ${sensorView.humidityValidCount}/4 DHT valid · THI agregat, bukan per titik`;
   const thiPill=$('thiStatus');
@@ -202,7 +203,7 @@ function renderSprinkler(){
     return;
   }
   box.className = 'sprinkler ' + (sprinklerOn ? 'on' : 'off');
-  $('sprinklerText').textContent = sprinklerOn ? 'MENYEMPROT 💦' : 'MATI';
+  $('sprinklerText').textContent = sprinklerOn ? 'MENYEMPROT' : 'MATI';
   if (sprinklerOn && sprayStart){
     const el = Math.floor((Date.now()-sprayStart)/1000);
     $('sprinklerTimer').textContent = appliedCfg.mode === 'manual' ? 'Manual · menyala sampai dimatikan.' : `Terpantau menyala ${el} detik.`;
@@ -320,7 +321,7 @@ function renderLogs(){
     const value=valueOf(r), hot=SCSTelemetry.finite(value) && value>=appliedCfg.threshold;
     tr.innerHTML = `<td>${time}</td>` + Array.from({length:6},(_,i)=>`<td>${fmtValue(r.s?.[i])}</td>`).join('')
       + Array.from({length:4},(_,i)=>`<td>${fmtValue(r.h?.[i])}</td>`).join('')
-      + `<td><b>${fmtValue(r.avg)}</b></td><td>${fmtValue(r.humidityAvg)}</td><td>${fmtValue(r.thi)}</td><td>${basisName(appliedCfg)}: ${!SCSTelemetry.finite(value)?'TIDAK VALID':hot?'≥ THRESHOLD':'< THRESHOLD'}</td><td>${r.spray?'💦 ON':'OFF'}</td>`;
+      + `<td><b>${fmtValue(r.avg)}</b></td><td>${fmtValue(r.humidityAvg)}</td><td>${fmtValue(r.thi)}</td><td>${basisName(appliedCfg)}: ${!SCSTelemetry.finite(value)?'TIDAK VALID':hot?'≥ THRESHOLD':'< THRESHOLD'}</td><td>${r.spray?'ON':'OFF'}</td>`;
     tb.appendChild(tr);
   });
   $('logCount').textContent = `${logs.length}/120 baris terbaru`;
@@ -328,12 +329,12 @@ function renderLogs(){
 $('filterSensor').onchange = renderLogs;
 $('btnLogNow').onclick = ()=> addLogRow(sensorView.avg);
 $('btnClearLog').onclick = async ()=>{
-  if (await askConfirm('🗑 Hapus semua log?', 'Semua baris log di browser akan hilang. Data di Firebase tetap ada.')){
+  if (await askConfirm('Hapus semua log?', 'Semua baris log di browser akan hilang. Data di Firebase tetap ada.')){
     logs=[]; localStorage.removeItem('scs_logs'); renderLogs();
   }
 };
 $('btnClearEvents').onclick = async ()=>{
-  if (await askConfirm('🗑 Hapus semua event?', 'Semua event di browser akan hilang. Data di Firebase tetap ada.')){
+  if (await askConfirm('Hapus semua event?', 'Semua event di browser akan hilang. Data di Firebase tetap ada.')){
     events=[]; localStorage.removeItem('scs_events'); renderEvents();
   }
 };
@@ -359,7 +360,7 @@ $('btnExport').onclick = ()=>{
   });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download = 'smartcow-ds-dht.csv'; a.click(); URL.revokeObjectURL(a.href);
+  a.download = 'costmosys-ds-dht.csv'; a.click(); URL.revokeObjectURL(a.href);
 };
 
 function pushEvent(msg){
@@ -405,7 +406,7 @@ function renderSchedList(){
   box.innerHTML = '';
   const slots = schedSlots();
   if (!slots.length){
-    box.innerHTML = '<div class="hint" style="padding:4px 2px">Belum ada jadwal — klik ＋ Tambah.</div>';
+    box.innerHTML = '<div class="hint sched-empty">Belum ada jadwal — klik Tambah jadwal.</div>';
   }
   slots.forEach((s, i) => {
     const f = SCS.formatIDDate(s.date);
@@ -413,13 +414,13 @@ function renderSchedList(){
     row.className = 'sched-row';
     row.innerHTML = `<span class="sched-num">${i + 1}</span>
       <div class="sched-groups">
-        <button class="pick-btn" data-pick="date" data-i="${i}" data-pop-anchor ${locked ? 'disabled' : ''} title="Pilih tanggal"><span class="pick-ico">📅</span><span>${f || s.date}</span></button>
-        <button class="pick-btn" data-pick="time" data-i="${i}" data-pop-anchor ${locked ? 'disabled' : ''} title="Pilih jam (24 jam)"><span class="pick-ico">🕐</span><span>${s.start}</span></button>
+        <button class="pick-btn" data-pick="date" data-i="${i}" data-pop-anchor ${locked ? 'disabled' : ''} title="Pilih tanggal"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg><span>${f || s.date}</span></button>
+        <button class="pick-btn" data-pick="time" data-i="${i}" data-pop-anchor ${locked ? 'disabled' : ''} title="Pilih jam (24 jam)"><svg class="icon" aria-hidden="true"><use href="#i-history"/></svg><span>${s.start}</span></button>
         <div class="sched-group"><span>Lebar jendela jadwal</span><div class="sched-inline step">
           <button data-dec="${i}" title="Kurangi 1 menit" ${locked ? 'disabled' : ''}>−</button><b data-durv="${i}">${s.dur}</b><button data-inc="${i}" title="Tambah 1 menit" ${locked ? 'disabled' : ''}>+</button><i>mnt</i>
         </div></div>
       </div>
-      <button class="btn red small sched-del" data-del="${i}" title="Hapus jadwal ini" ${locked ? 'disabled' : ''}>✕</button>`;
+      <button class="btn red small sched-del" data-del="${i}" title="Hapus jadwal ini" aria-label="Hapus jadwal ${i + 1}" ${locked ? 'disabled' : ''}><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>`;
     box.appendChild(row);
   });
   box.querySelectorAll('[data-pick]').forEach((b) => {
@@ -814,7 +815,7 @@ function setAuthView(ok, email=''){
     requestAnimationFrame(drawChart);
     $('mainContent').focus({preventScroll:true});
   } else {
-    document.title='Masuk — SmartCow';
+    document.title='Masuk — COSTMOSYS';
     $('connectionNotice').hidden=true;
     $('loginPassword').value='';
     $('loginPassword').type='password';
@@ -884,11 +885,11 @@ function fbConnect(){
 }
 function setConn(kind){
   const b = $('connBadge');
-  if (kind==='sim'){ b.textContent='● MENGHUBUNGKAN'; b.className='badge sim'; }
-  if (kind==='live'){ b.textContent='● TERHUBUNG'; b.className='badge live'; }
-  if (kind==='err'){ b.textContent='● KONEKSI GAGAL'; b.className='badge err'; }
-  if (kind==='offline'){ b.textContent='● OFFLINE / DATA LAMA'; b.className='badge offline'; }
-  if (kind==='login'){ b.textContent='● PERLU LOGIN'; b.className='badge sim'; }
+  if (kind==='sim'){ b.textContent='MENGHUBUNGKAN'; b.className='badge sim'; }
+  if (kind==='live'){ b.textContent='TERHUBUNG'; b.className='badge live'; }
+  if (kind==='err'){ b.textContent='KONEKSI GAGAL'; b.className='badge err'; }
+  if (kind==='offline'){ b.textContent='OFFLINE / DATA LAMA'; b.className='badge offline'; }
+  if (kind==='login'){ b.textContent='PERLU LOGIN'; b.className='badge sim'; }
 }
 
 $('loginForm').onsubmit = async (e)=>{
@@ -1055,7 +1056,7 @@ function applyAccessView(){
   });
   document.querySelectorAll('.side-link').forEach(b=>{b.classList.toggle('active',b.dataset.page===selectedPage);if(b.dataset.page===selectedPage)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   $('pageBreadcrumb').textContent={dash:'Overview',log:'Riwayat sensor',event:'Aktivitas sprinkler',admin:'Dashboard Admin'}[selectedPage];
-  if(fbConnected)document.title=`${$('pageBreadcrumb').textContent} — SmartCow`;
+  if(fbConnected)document.title=`${$('pageBreadcrumb').textContent} — COSTMOSYS`;
 }
 function showPage(p){
   closeSensors(false);
@@ -1078,7 +1079,7 @@ function showPage(p){
   });
   document.querySelectorAll('.side-link').forEach((b) => { b.classList.toggle('active', b.dataset.page === p); if(b.dataset.page===p) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
   applyAccessView();
-  document.title = `${$('pageBreadcrumb').textContent} — SmartCow`;
+  document.title = `${$('pageBreadcrumb').textContent} — COSTMOSYS`;
   if(fbConnected)try { localStorage.setItem('scs_page', p); } catch {}
   closeSide();
   window.scrollTo(0, 0);
@@ -1121,7 +1122,7 @@ document.querySelectorAll('.side-link').forEach((b) => { b.addEventListener('cli
 history=[]; logs=[]; events=[];
 buildGrid(6); buildHumidityGrid(); buildLogHead(6); syncButtons(); renderSensors(); renderLogs(); renderEvents(); drawChart(); renderSprinkler();
 try { showPage(localStorage.getItem('scs_page') || 'dash'); } catch { showPage('dash'); }
-document.title='Memuat — SmartCow';
+document.title='Memuat — COSTMOSYS';
 $('localPreviewNotice').hidden=!['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname);
 window.addEventListener('resize',()=>setSide($('sidebar').classList.contains('open')));
 document.querySelector('.workspace').addEventListener('transitionend',e=>{ if(e.target===e.currentTarget && e.propertyName==='margin-left') drawChart(); });

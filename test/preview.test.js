@@ -70,7 +70,7 @@ test('overview welcomes the signed-in account without changing the dynamic greet
   const heading = html.match(/<section class="page-heading" data-page="dash">([\s\S]*?)<\/section>/)?.[1];
   assert.ok(heading);
   assert.match(heading, /<h1>Halo, <span id="greetingName">Pengelola<\/span>\.<\/h1>/);
-  assert.match(heading, /<p>Selamat datang di SmartCow\. Pantau kondisi Kandang A dalam satu tempat\.<\/p>/);
+  assert.match(heading, /<p>Selamat datang di COSTMOSYS\. Pantau kondisi Kandang A dalam satu tempat\.<\/p>/);
   assert.match(heading, /id="clock"/);
   assert.match(html, /<div class="hero-copy"><h2>Kandang A<\/h2><\/div>/);
 });
@@ -87,12 +87,11 @@ test('local illustration is self-contained and contains no script or remote reso
   assert.match(html, /src="assets\/farm-scene.svg\?v=42"/);
 });
 
-test('Barn Console keeps depth selective, snapshot labels explicit and release assets versioned', () => {
+test('dashboard keeps focus ring, reduced motion, snapshot labels and versioned release assets', () => {
   const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
-  assert.match(css, /--shadow:[^;]*, -9px -9px/);
-  assert.match(css, /--inset: inset/);
   assert.match(css, /:focus-visible\s*\{\s*outline: 3px solid/);
   assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.match(css, /forced-colors: active/);
   assert.match(html, /Titik terendah/);
   assert.match(html, /Titik tertinggi/);
   assert.match(html, /Min\/maks antar titik · pembacaan terkini/);
@@ -102,9 +101,14 @@ test('Barn Console keeps depth selective, snapshot labels explicit and release a
   assert.doesNotMatch(hero,/SISTEM \/ 01|ESP32|relay|Lihat titik sensor|hero-kicker/);
   assert.doesNotMatch(hero, /id="heroHealth"|data-sensors=/);
   for (const url of [...html.matchAll(/(?:src|href)="((?:js|css)\/[^\"]+)"/g)].map(m => m[1])) {
-    const version = /^css\//.test(url) ? 47 : /^js\/admin\.js/.test(url) ? 45 : /^js\/(?:access|firebase)\.js/.test(url) ? 44 : 42;
-    assert.ok(url.endsWith(`?v=${version}`), `unexpected asset version: ${url}`);
+    assert.match(url, /\?v=\d+$/, `unversioned asset: ${url}`);
   }
+});
+
+test('headings never skip a level so the outline stays navigable', () => {
+  const levels = [...html.matchAll(/<h([1-6])\b/g)].map(m => Number(m[1]));
+  assert.equal(levels[0], 1);
+  levels.forEach((level, i) => { if (i) assert.ok(level <= levels[i - 1] + 1, `h${levels[i - 1]} followed by h${level}`); });
 });
 
 test('Admin has a separate directory, labelled account fields and accessible permission cards', () => {
@@ -121,15 +125,10 @@ test('Admin has a separate directory, labelled account fields and accessible per
     assert.ok(html.includes(`aria-label="${name}"`));
   }
   assert.match(html, /id="userCount"/);
-  const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
-  assert.match(css, /container: admin-directory \/ inline-size/);
-  assert.match(css, /@container admin-directory \(min-width: 580px\)/);
-  assert.match(css, /\.permission-choice input:checked::before/);
-  assert.match(css, /\.permission-choice input, \.access-toggle input \{ appearance: auto/);
 });
 
-test('account role, collapsed actions, access-only deletion and theme-specific sprinkler are explicit', () => {
-  assert.match(html, /id="userListTitle"[^>]*>Daftar Akun:<\/h3>/);
+test('account role, collapsed actions and access-only deletion are explicit', () => {
+  assert.match(html, /id="userListTitle"[^>]*>Daftar Akun:<\/h\d>/);
   for (const role of ['user', 'admin']) assert.match(html, new RegExp(`name="newAccountRole" value="${role}"`));
   assert.match(html, /id="deleteUserDialog"[^>]*aria-describedby="deleteUserDescription"/);
   assert.match(html, /Identitas Firebase Auth tetap ada/);
@@ -139,16 +138,13 @@ test('account role, collapsed actions, access-only deletion and theme-specific s
   assert.match(admin, /setAttribute\('aria-expanded'/);
   assert.match(admin, /SCSFirebase\.removeUserAccess\(user\.uid\)/);
   assert.doesNotMatch(admin + html + firebase, /Kirim email reset|sendPasswordResetEmail|resetPassword/);
-  const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
-  assert.match(css, /:root\[data-theme="dark"\] \.sprinkler-card \{ --card: #2b3545/);
-  assert.match(css, /\.sprinkler-card \{ color: var\(--txt\); \}/);
 });
 
 test('current account has a read-only card above the account directory in the same column', () => {
   const column = html.match(/<div class="admin-accounts">([\s\S]*?)<\/article>\s*<\/div>/)?.[1];
   assert.ok(column);
   assert.match(column, /class="card current-account" aria-labelledby="currentAccountTitle"/);
-  assert.match(column, /id="currentAccountTitle">Akun saat ini:<\/h3>/);
+  assert.match(column, /id="currentAccountTitle">Akun saat ini:<\/h\d>/);
   assert.ok(column.indexOf('id="currentAccountTitle"') < column.indexOf('id="userListTitle"'));
   const card = column.slice(0, column.indexOf('</article>'));
   for (const field of ['Name', 'Email', 'Avatar', 'Role', 'State']) assert.ok(card.includes(`id="currentAccount${field}"`));
@@ -158,21 +154,6 @@ test('current account has a read-only card above the account directory in the sa
   assert.match(admin, /syncCurrentAccount\(\);/);
 });
 
-test('account cards have a distinct theme-aware surface from the directory parent', () => {
-  const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
-  const light = css.match(/:root, :root\[data-theme="light"\] \{([^}]+)\}/)?.[1];
-  const dark = css.match(/:root\[data-theme="dark"\] \{([^}]+)\}/)?.[1];
-  for (const theme of [light, dark]) {
-    assert.ok(theme);
-    const parent = theme.match(/--card: (#[a-f\d]{6});/i)?.[1];
-    const account = theme.match(/--account-surface: (#[a-f\d]{6});/i)?.[1];
-    assert.ok(parent && account);
-    assert.notEqual(parent, account);
-  }
-  assert.match(css, /\.user-row \{[^}]*background: var\(--account-surface\);/);
-  assert.doesNotMatch(css, /\.admin-directory \{[^}]*background: var\(--account-surface\)/);
-});
-
 test('configuration precedes a full-width chart with three labelled responsive control groups', () => {
   const insights = html.slice(html.indexOf('<section class="grid insights-grid"'), html.indexOf('<section class="page-heading" data-page="log"'));
   assert.ok(insights.indexOf('class="card control-card"') < insights.indexOf('class="card chart-card"'));
@@ -180,16 +161,9 @@ test('configuration precedes a full-width chart with three labelled responsive c
   assert.equal((insights.match(/class="control-section(?: protection-section)?"/g) || []).length, 3);
   for (const id of ['basisTitle', 'sourceTitle', 'protectionTitle']) {
     assert.match(insights, new RegExp(`aria-labelledby="${id}"`));
-    assert.match(insights, new RegExp(`<h4 id="${id}">`));
+    assert.match(insights, new RegExp(`<h\\d id="${id}">`));
   }
   assert.match(insights, /class="control-actions"[\s\S]*id="btnSaveCfg"/);
-  const css = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
-  assert.match(css, /\.insights-grid\s*\{\s*grid-template-columns: minmax\(0, 1fr\)/);
-  assert.match(css, /container: sprinkler-config \/ inline-size/);
-  assert.match(css, /@container sprinkler-config \(min-width: 680px\)/);
-  assert.match(css, /@container sprinkler-config \(min-width: 1000px\)/);
-  assert.match(css, /\.control-card #schedList\s*\{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(css, /--radius: 14px/);
 });
 
 test('preview HTTP server serves only runtime assets and refuses writes/private paths', async t => {

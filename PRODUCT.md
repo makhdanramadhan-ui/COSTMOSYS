@@ -1,4 +1,4 @@
-# SmartCow
+# COSTMOSYS
 
 <!-- impeccable:product-schema 1 -->
 
@@ -12,7 +12,7 @@ Pengelola kandang menggunakan dashboard melalui ponsel atau komputer untuk memba
 
 ## Product Purpose
 
-SmartCow menghubungkan pembacaan enam DS18B20 dan empat DHT22 dengan kontrol sprinkler pada dua ESP32. Dashboard menampilkan suhu, kelembapan, THI, dan status perangkat. Pengguna dapat memilih kontrol otomatis berdasarkan suhu atau THI, atau mengoperasikan relay secara manual.
+COSTMOSYS (Cow Stress Monitoring System) menghubungkan pembacaan enam DS18B20 dan empat DHT22 dengan kontrol sprinkler pada dua ESP32. Dashboard menampilkan suhu, kelembapan, THI, dan status perangkat. Pengguna dapat memilih kontrol otomatis berdasarkan suhu atau THI, atau mengoperasikan relay secara manual.
 
 ## Positioning
 
@@ -37,7 +37,7 @@ Sistem ditujukan untuk pilot di kandang dengan koneksi yang dapat terputus. Peng
 
 ## Brand Commitments
 
-Nama produk: SmartCow. Antarmuka menggunakan Bahasa Indonesia, suhu dalam °C, kelembapan dalam %RH, dan waktu WIB. Tidak ada klaim pelanggan, keberhasilan mengurangi stres panas, atau hasil lapangan yang belum dibuktikan.
+Nama produk: COSTMOSYS (Cow Stress Monitoring System). Antarmuka menggunakan Bahasa Indonesia, suhu dalam °C, kelembapan dalam %RH, dan waktu WIB. Tidak ada klaim pelanggan, keberhasilan mengurangi stres panas, atau hasil lapangan yang belum dibuktikan.
 
 ## Evidence on Hand
 

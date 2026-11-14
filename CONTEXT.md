@@ -1,4 +1,4 @@
-# Istilah SmartCow
+# Istilah COSTMOSYS
 
 Istilah berikut digunakan pada dashboard dan panduan pengoperasian kandang.
 
@@ -16,7 +16,7 @@ Kandungan uap air relatif terhadap kondisi jenuh, ditampilkan dalam %RH. Empat t
 
 ## THI
 
-Temperature-Humidity Index, indikator lingkungan yang menggabungkan suhu dan kelembapan. SmartCow memakai rata-rata enam titik suhu dan empat titik kelembapan. Nilai ini bukan diagnosis stres panas pada sapi.
+Temperature-Humidity Index, indikator lingkungan yang menggabungkan suhu dan kelembapan. COSTMOSYS memakai rata-rata enam titik suhu dan empat titik kelembapan. Nilai ini bukan diagnosis stres panas pada sapi.
 
 ## Dasar kontrol
 

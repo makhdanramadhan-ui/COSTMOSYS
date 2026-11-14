@@ -80,7 +80,7 @@
         if(!allowed()||busy)return;const current=epoch;
         if(!await confirmRemoval(user)||current!==epoch||!allowed()||busy)return;
         busy=true;remove.disabled=true;
-        try{await SCSFirebase.removeUserAccess(user.uid);if(current===epoch&&allowed()){expanded.delete(user.uid);status('Akun dihapus dari SmartCow. Identitas Firebase Auth tetap ada dan hanya dapat dihapus permanen melalui Firebase Console.');el('userListTitle').focus();}}
+        try{await SCSFirebase.removeUserAccess(user.uid);if(current===epoch&&allowed()){expanded.delete(user.uid);status('Akun dihapus dari COSTMOSYS. Identitas Firebase Auth tetap ada dan hanya dapat dihapus permanen melalui Firebase Console.');el('userListTitle').focus();}}
         catch(error){if(current===epoch&&allowed()){status(message(error));feedback.textContent=message(error);}}
         finally{busy=false;if(remove.isConnected)remove.disabled=false;}
       };

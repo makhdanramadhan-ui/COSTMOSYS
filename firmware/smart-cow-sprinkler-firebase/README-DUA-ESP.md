@@ -1,4 +1,4 @@
-# SmartCow — dua ESP32 FINAL
+# COSTMOSYS — dua ESP32 FINAL
 
 ## Pilih sketch
 
